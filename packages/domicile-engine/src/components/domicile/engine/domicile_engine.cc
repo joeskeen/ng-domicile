@@ -977,7 +977,9 @@ class BrowserWindows : public mojom::BrowserWindowListObserver {
       event.browser_windows.push_back(
           EngineBrowserWindow{.id = std::move(window->id),
                               .title = std::move(window->title),
-                              .app_id = std::move(window->app_id)});
+                              .app_id = std::move(window->app_id),
+                              .url = std::move(window->url),
+                              .off_the_record = window->off_the_record});
     }
     queue_->Push(event);
   }
@@ -1331,9 +1333,12 @@ struct DomicileEngine {
             for (const domicile::EngineBrowserWindow& window :
                  event.browser_windows) {
               records.push_back(
-                  DomicileBrowserWindow{.id = window.id.c_str(),
-                                        .title = window.title.c_str(),
-                                        .app_id = window.app_id.c_str()});
+                  DomicileBrowserWindow{
+                      .id = window.id.c_str(),
+                      .title = window.title.c_str(),
+                      .app_id = window.app_id.c_str(),
+                      .url = window.url.c_str(),
+                      .off_the_record = window.off_the_record ? 1u : 0u});
             }
             callbacks_.browser_windows(callbacks_.user_data, records.data(),
                                        static_cast<uint32_t>(records.size()));

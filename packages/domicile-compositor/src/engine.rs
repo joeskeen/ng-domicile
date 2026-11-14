@@ -535,6 +535,10 @@ pub struct BrowserWindow {
     pub title: String,
     /// The app window's id, or empty for any other window.
     pub app_id: String,
+    /// The address it shows, or the one it is opening.
+    pub url: String,
+    /// Whether it is a private window.
+    pub private: bool,
 }
 
 /// When and how a frame reached the screen.
@@ -615,6 +619,8 @@ struct RawBrowserWindow {
     id: *const c_char,
     title: *const c_char,
     app_id: *const c_char,
+    url: *const c_char,
+    off_the_record: u8,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -2374,6 +2380,9 @@ fn browser_windows_from(records: &[RawBrowserWindow]) -> Vec<BrowserWindow> {
             title: unsafe { copied(record.title) },
             // SAFETY: as for `id`.
             app_id: unsafe { copied(record.app_id) },
+            // SAFETY: as for `id`.
+            url: unsafe { copied(record.url) },
+            private: record.off_the_record != 0,
         })
         .collect()
 }
@@ -3112,10 +3121,12 @@ mod tests {
     }
 
     #[test]
-    fn a_browser_window_is_three_strings_as_in_the_c_header() {
-        assert_eq!(std::mem::size_of::<RawBrowserWindow>(), 3 * 8);
+    fn a_browser_window_is_four_strings_and_a_flag_as_in_the_c_header() {
+        assert_eq!(std::mem::size_of::<RawBrowserWindow>(), 5 * 8);
         assert_eq!(std::mem::offset_of!(RawBrowserWindow, title), 8);
         assert_eq!(std::mem::offset_of!(RawBrowserWindow, app_id), 16);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindow, url), 24);
+        assert_eq!(std::mem::offset_of!(RawBrowserWindow, off_the_record), 32);
     }
 
     #[test]
@@ -3127,11 +3138,15 @@ mod tests {
                 id: c"3".as_ptr(),
                 title: c"Inbox".as_ptr(),
                 app_id: c"mail".as_ptr(),
+                url: c"https://mail.example/".as_ptr(),
+                off_the_record: 1,
             },
             RawBrowserWindow {
                 id: c"5".as_ptr(),
                 title: c"".as_ptr(),
                 app_id: c"".as_ptr(),
+                url: c"about:blank".as_ptr(),
+                off_the_record: 0,
             },
         ];
         on_browser_windows(queue, records.as_ptr(), 2);
@@ -3145,11 +3160,15 @@ mod tests {
                         id: "3".into(),
                         title: "Inbox".into(),
                         app_id: "mail".into(),
+                        url: "https://mail.example/".into(),
+                        private: true,
                     },
                     BrowserWindow {
                         id: "5".into(),
                         title: String::new(),
                         app_id: String::new(),
+                        url: "about:blank".into(),
+                        private: false,
                     },
                 ]),
                 Event::BrowserWindows(Vec::new()),

@@ -335,6 +335,10 @@ typedef struct DomicileBrowserWindow {
   const char* title;
   // The app window's id, or empty for any other window.
   const char* app_id;
+  // The address it shows, or the one it is opening.
+  const char* url;
+  // Nonzero for a private window, in the off-the-record profile.
+  uint8_t off_the_record;
 } DomicileBrowserWindow;
 
 // How the compositor wants one display's connector driven.
