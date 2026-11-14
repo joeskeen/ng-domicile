@@ -189,6 +189,15 @@ pub enum PointerConstraint {
     Confine,
 }
 
+/// A rectangle of a window's surface, in its surface-local units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
 /// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -275,9 +284,18 @@ pub enum ChromeMessage {
     /// For `zwp_relative_pointer_v1`, which games and VM viewers read.
     ///
     /// The browser sends it only for a hand on the mouse: not for a move under
-    /// a still pointer, nor for a shell's pointer warp. Its deltas are the
-    /// accelerated ones, which the compositor also gives as unaccelerated.
-    PointerRelative { app_id: String, dx: f64, dy: f64 },
+    /// a still pointer, nor for a shell's pointer warp. `(dx, dy)` is after
+    /// pointer acceleration; `(dx_unaccel, dy_unaccel)` is the device's own
+    /// motion in the same units. A device that reports no unaccelerated
+    /// motion (a nested desktop's host, emulated input) gives the accelerated
+    /// deltas for both.
+    PointerRelative {
+        app_id: String,
+        dx: f64,
+        dy: f64,
+        dx_unaccel: f64,
+        dy_unaccel: f64,
+    },
     /// The page took or let go of the pointer for a window that asked to lock
     /// or confine it ([`HostMessage::AppPointerConstraint`]).
     ///
@@ -384,6 +402,11 @@ pub enum ChromeMessage {
     /// Report how the desktop is. Answered with [`HostMessage::Status`] on
     /// this connection only. Sent by `domicile status`.
     WhichStatus,
+
+    /// Report the commands the shell's pages run for `domicile send-shell`.
+    /// Answered with [`HostMessage::ShellCommandList`] on this connection
+    /// only. Sent by `domicile list-shell-commands`.
+    WhichShellCommands,
 
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.
@@ -716,9 +739,15 @@ pub enum HostMessage {
     ///
     /// Only the window under the pointer is offered one. The page answers
     /// with [`ChromeMessage::PointerConstrained`].
+    ///
+    /// `region` is the part of the window the constraint holds, as
+    /// non-overlapping rectangles of its surface; `None` for the whole
+    /// window, and always `None` with no constraint. A confined pointer stays
+    /// inside it; a lock begins only inside it.
     AppPointerConstraint {
         app_id: String,
         constraint: Option<PointerConstraint>,
+        region: Option<Vec<SurfaceRect>>,
     },
 
     /// A window or popup reached the screen: viz showed its first frame, or
@@ -799,6 +828,11 @@ pub enum HostMessage {
 
     /// Answers [`ChromeMessage::WhichStatus`] on the asking connection only.
     Status(DesktopStatus),
+
+    /// Answers [`ChromeMessage::WhichShellCommands`] on the asking connection
+    /// only: what each listening page said it runs, once each, in the order
+    /// the pages started listening.
+    ShellCommandList { commands: Vec<ShellCommandHelp> },
 
     /// The compositor's compiled keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`.
     ///
@@ -2153,13 +2187,29 @@ pub enum SystemRequest {
     PreviewWindow { window: PreviewedWindow },
     /// Report each command sent with [`SystemRequest::SendShell`]. Answered
     /// with [`SystemReply::Started`], then a [`SystemEvent::ShellCommand`] per
-    /// command. [`SystemRequest::Unwatch`] ends it.
-    ShellCommands,
+    /// command, which the page answers with
+    /// [`SystemRequest::AnswerShellCommand`]. [`SystemRequest::Unwatch`] ends
+    /// it.
+    ///
+    /// `commands` describes what the page runs, for
+    /// `domicile list-shell-commands`, while it listens.
+    ShellCommands {
+        #[serde(default)]
+        commands: Vec<ShellCommandHelp>,
+    },
     /// Send `command` to every page listening with
     /// [`SystemRequest::ShellCommands`], as a `send-shell` keybinding would
-    /// run it. Answered with [`SystemReply::Sent`]. `domicile send-shell`
-    /// sends this.
+    /// run it. Answered with [`SystemReply::Sent`] once a page ran it, or a
+    /// failure when every page refused it or none answered in time.
+    /// `domicile send-shell` sends this.
     SendShell { command: Vec<String> },
+    /// Say whether this page ran the [`SystemEvent::ShellCommand`] numbered
+    /// `sent`: `refused` says why not. Answered with [`SystemReply::Set`].
+    AnswerShellCommand {
+        sent: u64,
+        #[serde(default)]
+        refused: Option<String>,
+    },
     /// Report when nobody has been at the desktop for `seconds`, and when
     /// somebody is again. Answered with [`SystemReply::Started`], then a
     /// [`SystemEvent::Idle`] on each change: `true` that long after the last
@@ -2424,7 +2474,7 @@ pub enum SystemReply {
     Copied,
     /// A window's frame, as a `data:` URL of a PNG.
     Preview { frame: String },
-    /// At least one page heard the command.
+    /// A page ran the command.
     Sent,
     /// The window's states were replaced, or the color temperature set.
     Set,
@@ -2463,8 +2513,9 @@ pub enum SystemEvent {
     /// The watched file, or an entry of the watched directory, changed.
     /// `path` is absolute.
     Changed { path: String },
-    /// A command sent with [`SystemRequest::SendShell`].
-    ShellCommand { command: Vec<String> },
+    /// A command sent with [`SystemRequest::SendShell`], numbered `sent` for
+    /// [`SystemRequest::AnswerShellCommand`].
+    ShellCommand { command: Vec<String>, sent: u64 },
     /// Whether nobody has been at the desktop for the time a
     /// [`SystemRequest::IdleAfter`] or [`SystemRequest::IdleBeforeBlanking`]
     /// named.
@@ -2697,6 +2748,15 @@ pub struct ListedDisplay {
     pub names: Vec<String>,
     /// Off when slept or blanked.
     pub lit: bool,
+}
+
+/// One command a shell runs, as `domicile list-shell-commands` prints it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShellCommandHelp {
+    /// Its words, such as `focus left|right|up|down` or `workspace <name>`.
+    pub usage: String,
+    /// What it does, in a sentence.
+    pub description: String,
 }
 
 /// How the desktop is, as `domicile status` prints it. See

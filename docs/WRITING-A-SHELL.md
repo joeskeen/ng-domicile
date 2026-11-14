@@ -428,6 +428,15 @@ Each entry in `domicile.windows.list` describes one client window.
   ask goes away. Escape does not end a lock, since games use it; leaving the
   user a way out, such as a chord that moves the keyboard, is the shell's job.
   Manganese's `followPointerLock` does all of this.
+- **Pointer confinement:** for `"confine"`, call
+  `pointer.confine(boxes)` with the boxes in the page that hold the pointer:
+  the window's `<app>` box, or its `pointerRegion` (boxes in the window's own
+  coordinates, which `width` and `height` measure) scaled into it. Then call
+  `windows.pointerConstrained(appId, true)`. Call `confine` again as the
+  window moves, and `confine([])` plus `pointerConstrained(appId, false)` once
+  it loses the keyboard or the ask goes away. A box may reach onto another
+  monitor. Nested or headless, `confine` resolves `false` and the pointer is
+  not held. Manganese's `usePointerConfinement` does all of this.
 - **Size:** the `<app>` element's layout box is the window size. The engine
   sends it to the client. Resize a window by styling its element. Set
   `resizing` on the element while the user drags an edge; see
@@ -767,7 +776,8 @@ const Keys = () => {
   useEffect(
     () =>
       bindKeys(domicile, KEYS, {
-        onCommand: (args) => run(args), // ["focus", "right"]
+        commands: [{ usage: "focus left|right", description: "Move focus." }],
+        onCommand: (args) => run(args), // ["focus", "right"] -> Ok("ran") or Err(why)
         onModeChanged: setMode, // "resize", "default"
       }).unbind,
     [domicile],
@@ -797,7 +807,8 @@ bindKeys(
     },
   },
   {
-    onCommand: (args) => run(args),        // ["focus", "right"]
+    commands: [{ usage: "focus left|right", description: "Move focus." }],
+    onCommand: (args) => run(args),        // ["focus", "right"] -> Ok("ran") or Err(why)
     onModeChanged: (mode) => show(mode),   // "resize", "default"
   },
 );
@@ -820,13 +831,19 @@ bindKeys(
   keys are in by then; `unbind` runs any still armed. Gestures cannot hold an
   action. For example, `"Meta+Tab": KeyAction.Hold(SendShell(["peek"]),
   SendShell(["unpeek"]))`.
-- `domicile send-shell <word>…` from a terminal reaches `onCommand` too, on
-  every page bound. A page that cannot listen calls `report`, which logs by
+- `onCommand` returns `Ok("ran")`, or `Err(why)` for a command the shell does
+  not run. A pressed binding's `Err` goes to `reportRefusal`, which logs by
   default.
+- `domicile send-shell <word>…` from a terminal reaches `onCommand` too, on
+  every page bound. `send-shell` fails with the `Err`, or when no page answers
+  within a second. A page that cannot listen calls `report`, which logs by
+  default.
+- `commands` describes what `onCommand` runs: `domicile list-shell-commands`
+  (and `send-shell --help`) prints it.
 - It returns `{ setMode, unbind }`. `setMode` keeps one mode across a desktop
   of several pages.
-- Command meanings are yours. Document them in your README, as
-  [manganese does](/packages/shell-manganese/README.md). Manganese takes keys
+- Command meanings are yours. Describe them in `commands`, and in your README,
+  as [manganese does](/packages/shell-manganese/README.md). Manganese takes keys
   from `runManganese({ keybindings })`, defaulting to sway's.
 - While bound, a key bound in any mode is taken from every client. `unbind`
   gives the chords back (`domicile.keyboard.ungrab`). Each `grab` needs its

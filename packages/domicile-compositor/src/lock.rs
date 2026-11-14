@@ -436,7 +436,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ConnectionRequest::WhichMonitors
             | ConnectionRequest::WhichDisplays
             | ConnectionRequest::WhichWindows
-            | ConnectionRequest::WhichStatus,
+            | ConnectionRequest::WhichStatus
+            | ConnectionRequest::WhichShellCommands,
         )
         | Asked::System(
             Reach::ReadsTheKernel
@@ -850,6 +851,8 @@ mod tests {
                     app_id: "app-1".into(),
                     dx: 2.0,
                     dy: 1.0,
+                    dx_unaccel: 1.0,
+                    dy_unaccel: 0.5,
                 },
             ),
             (
@@ -1138,6 +1141,7 @@ mod tests {
             ConnectionRequest::WhichDisplays,
             ConnectionRequest::WhichWindows,
             ConnectionRequest::WhichStatus,
+            ConnectionRequest::WhichShellCommands,
         ] {
             assert_eq!(refused(Asked::OnTheConnection(&request)), None);
         }

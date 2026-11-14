@@ -39,6 +39,7 @@ pub enum ConnectionRequest {
     WhichDisplays,
     WhichWindows,
     WhichStatus,
+    WhichShellCommands,
 }
 
 /// Write a message's responses to the connection that asked, in order.
@@ -452,6 +453,9 @@ fn read_chrome_messages(
             Ok(ChromeMessage::WhichStatus) => {
                 answer_on_the_connection(hub, ConnectionRequest::WhichStatus)
             }
+            Ok(ChromeMessage::WhichShellCommands) => {
+                answer_on_the_connection(hub, ConnectionRequest::WhichShellCommands)
+            }
             // The Wayland thread runs the theme turnover and its deadline
             // timer.
             Ok(ChromeMessage::ThemeCaptured { theme }) => {
@@ -524,8 +528,20 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::PointerConstrained { app_id, active });
                 Vec::new()
             }
-            Ok(ChromeMessage::PointerRelative { app_id, dx, dy }) => {
-                hub.send_request(ClientRequest::PointerRelative { app_id, dx, dy });
+            Ok(ChromeMessage::PointerRelative {
+                app_id,
+                dx,
+                dy,
+                dx_unaccel,
+                dy_unaccel,
+            }) => {
+                hub.send_request(ClientRequest::PointerRelative {
+                    app_id,
+                    dx,
+                    dy,
+                    dx_unaccel,
+                    dy_unaccel,
+                });
                 Vec::new()
             }
             Ok(ChromeMessage::PointerLeave { .. }) => {
@@ -876,6 +892,10 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
             hub.keymaps.listed().map(|listed| listed.active),
             hub.idle_holds.holders(),
         )],
+        // For `domicile list-shell-commands`: what `send-shell` takes.
+        ConnectionRequest::WhichShellCommands => vec![HostMessage::ShellCommandList {
+            commands: hub.shell_commands.described(),
+        }],
         // A page has no filesystem, so the compositor searches for it. Safe
         // because `search_files` names no path; this side decides what is read.
         //
