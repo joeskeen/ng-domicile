@@ -345,7 +345,8 @@ impl Host {
                 size: None,
                 focused: false,
                 urgent: false,
-                url: Some(window.url.clone()),
+                // An older engine says no address.
+                url: (!window.url.is_empty()).then(|| window.url.clone()),
                 private: window.private,
             })
         });
