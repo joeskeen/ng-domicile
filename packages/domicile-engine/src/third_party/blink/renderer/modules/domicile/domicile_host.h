@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "base/time/time.h"
 #include "components/domicile/common/forwarded_keys.h"
 #include "components/domicile/common/held_chords.h"
 #include "components/domicile/common/warp_landing.h"
@@ -55,6 +56,8 @@ class DomicileClipboardEntry;
 class DomicileTrayItem;
 class DomicileNotification;
 class DomicileExtension;
+class DomicileExtensionSettings;
+class DomicileInstalledExtension;
 class DomicileWindow;
 class DomicileFileSearch;
 class DomicileFetchHeader;
@@ -226,6 +229,7 @@ class MODULES_EXPORT DomicileHost final
   void grabShortcut(ScriptState*,
                     const String& chord,
                     bool while_inhibited,
+                    uint32_t longest_tap,
                     ExceptionState&);
   // Answers one grabShortcut of that name. The last one gives the chord back,
   // and its key too unless another name grabbed is on it.
@@ -235,6 +239,18 @@ class MODULES_EXPORT DomicileHost final
   void grabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void ungrabGesture(ScriptState*, const String& gesture, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
+  ScriptPromise<IDLUndefined> setExtensionEnabled(ScriptState*,
+                                                  const String& id,
+                                                  bool enabled,
+                                                  ExceptionState&);
+  ScriptPromise<IDLUndefined> configureExtension(
+      ScriptState*,
+      const String& id,
+      const DomicileExtensionSettings* settings,
+      ExceptionState&);
+  ScriptPromise<IDLUndefined> uninstallExtension(ScriptState*,
+                                                 const String& id,
+                                                 ExceptionState&);
 
   // Blink's DEFINE_ATTRIBUTE_EVENT_LISTENER, keyed on the fork's own names
   // rather than event_type_names: see domicile_event_names.h for why.
@@ -349,6 +365,7 @@ class MODULES_EXPORT DomicileHost final
   const FrozenArray<DomicileTrayItem>* tray() const;
   const FrozenArray<DomicileNotification>* notifications() const;
   const FrozenArray<DomicileExtension>* extensions() const;
+  const FrozenArray<DomicileInstalledExtension>* installedExtensions() const;
   std::optional<bool> idle() const;
   std::optional<bool> locked() const;
   std::optional<V8DomicileTheme> theme() const;
@@ -410,7 +427,8 @@ class MODULES_EXPORT DomicileHost final
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void GesturePerformed(domicile::mojom::blink::GesturePtr gesture) override;
-  void ModifierTapped(domicile::mojom::blink::TapModifier modifier) override;
+  void ModifierTapped(domicile::mojom::blink::TapModifier modifier,
+                      base::TimeDelta held) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
   void Files(const String& query,
              const Vector<String>& files,
@@ -440,6 +458,9 @@ class MODULES_EXPORT DomicileHost final
   // domicile::mojom::blink::ExtensionTrayClient:
   void ExtensionsChanged(
       Vector<domicile::mojom::blink::TrayExtensionPtr> extensions) override;
+  void InstalledChanged(
+      Vector<domicile::mojom::blink::InstalledExtensionPtr> extensions)
+      override;
   void PopupRequested(const String& id, const String& popup) override;
 
   // domicile::mojom::blink::BrowserWindowsClient:
@@ -634,6 +655,7 @@ class MODULES_EXPORT DomicileHost final
   Member<FrozenArray<DomicileTrayItem>> tray_items_;
   Member<FrozenArray<DomicileNotification>> notifications_;
   Member<FrozenArray<DomicileExtension>> extensions_;
+  Member<FrozenArray<DomicileInstalledExtension>> installed_extensions_;
   std::optional<bool> idle_;
   std::optional<bool> locked_;
   std::optional<V8DomicileTheme> theme_;
@@ -713,6 +735,8 @@ class MODULES_EXPORT DomicileHost final
     domicile::mojom::blink::TapModifier modifier;
     uint32_t holds = 1;
     bool while_inhibited = false;
+    // The longest any grab of it lets the modifier be held and still tap.
+    base::TimeDelta longest;
   };
   Vector<GrabbedTap> taps_;
   // A gesture grabbed by name, and how many grabGesture calls no

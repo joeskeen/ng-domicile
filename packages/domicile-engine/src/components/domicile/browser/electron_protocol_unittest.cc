@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
+#include "base/strings/strcat.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 
@@ -452,6 +453,297 @@ TEST(ElectronProtocolTest, SyncPortAndPageEventsAreOneLineEach) {
             "\n");
   EXPECT_EQ(ElectronPageGone(1), R"({"type":"page_gone","window":1})"
                                  "\n");
+}
+
+TEST(ElectronProtocolTest, WebRequestListenNamesTheSessionsEvents) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"web_request_listen","session":"persist:x",)"
+      R"("events":["before_request","completed","headers_received"]})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronWebRequestListen>(*request),
+            (ElectronWebRequestListen{
+                .session = "persist:x",
+                .events = {ElectronWebRequestEvent::kBeforeRequest,
+                           ElectronWebRequestEvent::kHeadersReceived,
+                           ElectronWebRequestEvent::kCompleted}}));
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_listen","session":"",)"
+                       R"("events":["before_flying"]})"),
+            "\"events\" must name webRequest events");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_listen","session":""})"),
+            "\"events\" must name webRequest events");
+}
+
+TEST(ElectronProtocolTest, AWebRequestAnswerSaysWhatToChange) {
+  const auto request = ParseElectronRequest(
+      R"({"type":"web_request_answer","ask":3,"cancel":false,)"
+      R"("redirect_url":"https://b.test/","request_headers":[["a","1"]],)"
+      R"("response_headers":[["b","2"],["b","3"]],)"
+      R"("status_line":"HTTP/1.1 200 OK"})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronWebRequestAnswer>(*request),
+            (ElectronWebRequestAnswer{
+                .ask = 3,
+                .redirect_url = GURL("https://b.test/"),
+                .request_headers = ElectronHeaders{{"a", "1"}},
+                .response_headers = ElectronHeaders{{"b", "2"}, {"b", "3"}},
+                .status_line = "HTTP/1.1 200 OK"}));
+}
+
+TEST(ElectronProtocolTest, AnEmptyWebRequestAnswerChangesNothing) {
+  const auto request =
+      ParseElectronRequest(R"({"type":"web_request_answer","ask":4})");
+
+  ASSERT_TRUE(request.has_value()) << request.error().why;
+  EXPECT_EQ(std::get<ElectronWebRequestAnswer>(*request),
+            ElectronWebRequestAnswer{.ask = 4});
+}
+
+TEST(ElectronProtocolTest, ABadWebRequestAnswerIsRefused) {
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer"})"),
+            "\"ask\" must be a whole number from 1");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer","ask":1,)"
+                       R"("redirect_url":"nowhere"})"),
+            "\"redirect_url\" must be a URL");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer","ask":1,)"
+                       R"("cancel":"yes"})"),
+            "\"cancel\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer","ask":1,)"
+                       R"("request_headers":[["a b","1"]]})"),
+            "\"a b\" is not a header name");
+  EXPECT_EQ(WhyRefused(R"({"type":"web_request_answer","ask":1,)"
+                       R"("status_line":"200 OK"})"),
+            "\"status_line\" must be an HTTP status line");
+}
+
+TEST(ElectronProtocolTest, AWebRequestEventIsOneLine) {
+  EXPECT_EQ(ElectronWebRequest(
+                ElectronWebRequestEvent::kBeforeSendHeaders, 3, 1, "persist:x",
+                ElectronWebRequestDetails{
+                    .id = 7,
+                    .url = GURL("https://a.test/"),
+                    .method = "GET",
+                    .resource_type = "mainFrame",
+                    .referrer = "",
+                    .request_headers = ElectronHeaders{{"a", "1"}}}),
+            R"({"ask":3,"event":"before_send_headers","id":7,"method":"GET",)"
+            R"("referrer":"","request_headers":[["a","1"]],)"
+            R"("resource_type":"mainFrame","session":"persist:x",)"
+            R"("type":"web_request","url":"https://a.test/","window":1})"
+            "\n");
+  EXPECT_EQ(ElectronWebRequest(ElectronWebRequestEvent::kErrorOccurred,
+                               std::nullopt, std::nullopt, "",
+                               ElectronWebRequestDetails{
+                                   .id = 8,
+                                   .url = GURL("https://a.test/x.js"),
+                                   .method = "GET",
+                                   .resource_type = "script",
+                                   .referrer = "https://a.test/",
+                                   .status_code = 404,
+                                   .status_line = "HTTP/1.1 404 Not Found",
+                                   .error = "net::ERR_ABORTED",
+                                   .from_cache = true,
+                                   .ip = "192.0.2.1"}),
+            R"({"error":"net::ERR_ABORTED","event":"error_occurred",)"
+            R"("from_cache":true,"id":8,"ip":"192.0.2.1","method":"GET",)"
+            R"("referrer":"https://a.test/","resource_type":"script",)"
+            R"("session":"","status_code":404,)"
+            R"("status_line":"HTTP/1.1 404 Not Found","type":"web_request",)"
+            R"("url":"https://a.test/x.js"})"
+            "\n");
+}
+
+TEST(ElectronProtocolTest, OnlyBeforeRequestSendHeadersAndHeadersReceivedWait) {
+  EXPECT_TRUE(IsBlockingElectronWebRequestEvent(
+      ElectronWebRequestEvent::kBeforeRequest));
+  EXPECT_TRUE(IsBlockingElectronWebRequestEvent(
+      ElectronWebRequestEvent::kBeforeSendHeaders));
+  EXPECT_TRUE(IsBlockingElectronWebRequestEvent(
+      ElectronWebRequestEvent::kHeadersReceived));
+  for (ElectronWebRequestEvent event :
+       {ElectronWebRequestEvent::kSendHeaders,
+        ElectronWebRequestEvent::kResponseStarted,
+        ElectronWebRequestEvent::kBeforeRedirect,
+        ElectronWebRequestEvent::kCompleted,
+        ElectronWebRequestEvent::kErrorOccurred}) {
+    EXPECT_FALSE(IsBlockingElectronWebRequestEvent(event));
+  }
+}
+
+TEST(ElectronProtocolTest, ASessionCallNamesItsSessionAndMethod) {
+  const auto get = ParseElectronRequest(
+      R"({"type":"session_call","call":1,"session":"persist:a",)"
+      R"("method":"cookies_get","filter":{"url":"https://a.test/x",)"
+      R"("name":"n","domain":"a.test","path":"/","secure":true,)"
+      R"("session":false,"http_only":true}})");
+  ASSERT_TRUE(get.has_value()) << get.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*get),
+            (ElectronSessionCall{.call = 1,
+                                 .session = "persist:a",
+                                 .method = ElectronGetCookies{
+                                     .filter = {.url = GURL("https://a.test/x"),
+                                                .name = "n",
+                                                .domain = "a.test",
+                                                .path = "/",
+                                                .secure = true,
+                                                .session = false,
+                                                .http_only = true}}}));
+
+  const auto all = ParseElectronRequest(
+      R"({"type":"session_call","call":2,"session":"","method":"cookies_get"})");
+  ASSERT_TRUE(all.has_value()) << all.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*all),
+            (ElectronSessionCall{.call = 2, .method = ElectronGetCookies{}}));
+}
+
+TEST(ElectronProtocolTest, ASessionCallSetsAndRemovesCookies) {
+  const auto set = ParseElectronRequest(
+      R"({"type":"session_call","call":3,"session":"","method":"cookies_set",)"
+      R"("details":{"url":"https://a.test/","name":"n","value":"v",)"
+      R"("domain":".a.test","path":"/p","secure":true,"http_only":true,)"
+      R"("expiration_date":1900000000.5,"same_site":"strict"}})");
+  ASSERT_TRUE(set.has_value()) << set.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*set).method,
+            ElectronSessionMethod(
+                ElectronSetCookie{.details = {.url = GURL("https://a.test/"),
+                                              .name = "n",
+                                              .value = "v",
+                                              .domain = ".a.test",
+                                              .path = "/p",
+                                              .secure = true,
+                                              .http_only = true,
+                                              .expiration_date = 1900000000.5,
+                                              .same_site = "strict"}}));
+
+  const auto bare = ParseElectronRequest(
+      R"({"type":"session_call","call":4,"session":"","method":"cookies_set",)"
+      R"("details":{"url":"https://a.test/"}})");
+  ASSERT_TRUE(bare.has_value()) << bare.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*bare).method,
+            ElectronSessionMethod(ElectronSetCookie{
+                .details = {.url = GURL("https://a.test/")}}));
+
+  const auto remove = ParseElectronRequest(
+      R"({"type":"session_call","call":5,"session":"","method":"cookies_remove",)"
+      R"("url":"https://a.test/","name":"n"})");
+  ASSERT_TRUE(remove.has_value()) << remove.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*remove).method,
+            ElectronSessionMethod(ElectronRemoveCookie{
+                .url = GURL("https://a.test/"), .name = "n"}));
+}
+
+TEST(ElectronProtocolTest, ASessionCallClearsStorageAndSetsTheUserAgent) {
+  const auto clear = ParseElectronRequest(
+      R"({"type":"session_call","call":6,"session":"","method":"clear_storage_data",)"
+      R"("origin":"https://a.test","storages":["cookies","localstorage"]})");
+  ASSERT_TRUE(clear.has_value()) << clear.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*clear).method,
+            ElectronSessionMethod(
+                ElectronClearStorage{.origin = GURL("https://a.test"),
+                                     .storages = {"cookies", "localstorage"}}));
+
+  const auto everything = ParseElectronRequest(
+      R"({"type":"session_call","call":7,"session":"","method":"clear_storage_data"})");
+  ASSERT_TRUE(everything.has_value()) << everything.error().why;
+  EXPECT_EQ(std::get<ElectronSessionCall>(*everything).method,
+            ElectronSessionMethod(ElectronClearStorage{}));
+
+  const auto agent = ParseElectronRequest(
+      R"({"type":"session_call","call":8,"session":"","method":"set_user_agent",)"
+      R"("user_agent":"Claude/1"})");
+  ASSERT_TRUE(agent.has_value()) << agent.error().why;
+  EXPECT_EQ(
+      std::get<ElectronSessionCall>(*agent).method,
+      ElectronSessionMethod(ElectronSetUserAgent{.user_agent = "Claude/1"}));
+
+  for (const auto& [method, expected] :
+       {std::pair<std::string, ElectronSessionMethod>{"clear_cache",
+                                                      ElectronClearCache{}},
+        {"cookies_flush", ElectronFlushCookies{}}}) {
+    const auto call = ParseElectronRequest(base::StrCat(
+        {R"({"type":"session_call","call":9,"session":"","method":")", method,
+         R"("})"}));
+    ASSERT_TRUE(call.has_value()) << call.error().why;
+    EXPECT_EQ(std::get<ElectronSessionCall>(*call).method, expected);
+  }
+}
+
+TEST(ElectronProtocolTest, ABadSessionCallIsRefused) {
+  EXPECT_EQ(
+      WhyRefused(
+          R"({"type":"session_call","session":"","method":"clear_cache"})"),
+      "\"call\" must be a whole number from 1");
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"session_call","call":1,"method":"clear_cache"})"),
+      "\"session\" must be a string");
+  EXPECT_EQ(
+      WhyRefused(
+          R"({"type":"session_call","call":1,"session":"","method":"x"})"),
+      "no session call is named x");
+  EXPECT_EQ(WhyRefused(R"({"type":"session_call","call":1,"session":"",)"
+                       R"("method":"cookies_set","details":{}})"),
+            "\"url\" must be a string");
+  EXPECT_EQ(
+      WhyRefused(R"({"type":"session_call","call":1,"session":"",)"
+                 R"("method":"cookies_set","details":{"url":"https://a.test/",)"
+                 R"("same_site":"sometimes"}})"),
+      "\"same_site\" must be unspecified, no_restriction, lax or strict");
+  EXPECT_EQ(WhyRefused(R"({"type":"session_call","call":1,"session":"",)"
+                       R"("method":"cookies_get","filter":{"secure":"yes"}})"),
+            "\"secure\" must be true or false");
+  EXPECT_EQ(WhyRefused(R"({"type":"session_call","call":1,"session":"",)"
+                       R"("method":"clear_storage_data","storages":["disk"]})"),
+            "\"disk\" is not a storage clearStorageData knows");
+  EXPECT_EQ(WhyRefused(R"({"type":"session_call","call":1,"session":"",)"
+                       R"("method":"set_user_agent"})"),
+            "\"user_agent\" must be a string");
+}
+
+TEST(ElectronProtocolTest, ASessionResultIsOneLine) {
+  EXPECT_EQ(ElectronSessionResult(1, base::Value()),
+            "{\"call\":1,\"result\":null,\"type\":\"session_result\"}\n");
+  EXPECT_EQ(ElectronSessionResult(2, base::unexpected("no")),
+            "{\"call\":2,\"error\":\"no\",\"type\":\"session_result\"}\n");
+  std::string json;
+  base::JSONWriter::Write(ElectronCookieValue({.name = "n",
+                                               .value = "v",
+                                               .domain = "a.test",
+                                               .host_only = true,
+                                               .path = "/",
+                                               .secure = true,
+                                               .http_only = false,
+                                               .expiration_date = 2.5,
+                                               .same_site = "lax"}),
+                          &json);
+  EXPECT_EQ(json, R"({"domain":"a.test","expirationDate":2.5,"hostOnly":true,)"
+                  R"("httpOnly":false,"name":"n","path":"/","sameSite":"lax",)"
+                  R"("secure":true,"session":false,"value":"v"})");
+}
+
+TEST(ElectronProtocolTest, ACookieFilterMatchesAsElectronsDoes) {
+  const ElectronCookie cookie{.name = "n",
+                              .value = "v",
+                              .domain = ".a.test",
+                              .path = "/p",
+                              .secure = true,
+                              .http_only = true};
+  EXPECT_TRUE(ElectronCookieMatches(cookie, {}));
+  EXPECT_TRUE(ElectronCookieMatches(cookie, {.name = "n"}));
+  EXPECT_FALSE(ElectronCookieMatches(cookie, {.name = "m"}));
+  EXPECT_TRUE(ElectronCookieMatches(cookie, {.domain = "a.test"}));
+  EXPECT_TRUE(ElectronCookieMatches({.name = "n", .domain = "b.a.test"},
+                                    {.domain = "a.test"}));
+  EXPECT_FALSE(ElectronCookieMatches({.name = "n", .domain = "ba.test"},
+                                     {.domain = "a.test"}));
+  EXPECT_FALSE(ElectronCookieMatches(cookie, {.domain = "b.a.test"}));
+  EXPECT_TRUE(ElectronCookieMatches(cookie, {.path = "/p"}));
+  EXPECT_FALSE(ElectronCookieMatches(cookie, {.path = "/"}));
+  EXPECT_FALSE(ElectronCookieMatches(cookie, {.secure = false}));
+  EXPECT_TRUE(ElectronCookieMatches(cookie, {.session = true}));
+  EXPECT_FALSE(ElectronCookieMatches({.name = "n", .expiration_date = 1},
+                                     {.session = true}));
+  EXPECT_FALSE(ElectronCookieMatches(cookie, {.http_only = false}));
 }
 
 }  // namespace

@@ -71,6 +71,11 @@ class ElectronResponder {
 
 class ElectronApp;
 
+// Where a waiting request hears the app's answer to one of its webRequest
+// events.
+using ElectronWebRequestAnswered =
+    base::OnceCallback<void(ElectronWebRequestAnswer)>;
+
 // One of an app's sessions, as its pages' loaders see it: which schemes the
 // app handles there, and the way to its handlers. Lives as long as its app.
 class ElectronSession {
@@ -88,6 +93,25 @@ class ElectronSession {
   // Asks the app's handler for `fetch`, a request in a scheme it handles.
   void Fetch(ElectronFetch fetch, std::unique_ptr<ElectronResponder> responder);
 
+  // Whether the app has a webRequest listener for `event` in this session.
+  bool ListensFor(ElectronWebRequestEvent event) const;
+  // Whether it has any.
+  bool ListensForWebRequests() const { return !web_request_events_.empty(); }
+  // Asks the app's listener for `event`, one a request waits on, about a
+  // request desk window `window`'s page made (nothing when no window's page
+  // made it). `answered` runs once, with the answer or, when the app goes
+  // first, with a cancel.
+  void AskWebRequest(ElectronWebRequestEvent event,
+                     const std::optional<std::string>& window,
+                     ElectronWebRequestDetails details,
+                     ElectronWebRequestAnswered answered);
+  // Tells the app's listener of `event`, one nothing waits on.
+  void TellWebRequest(ElectronWebRequestEvent event,
+                      const std::optional<std::string>& window,
+                      ElectronWebRequestDetails details);
+
+  // session.setUserAgent's, for the session's pages; empty for the engine's.
+  const std::string& user_agent() const { return user_agent_; }
   const std::string& name() const { return name_; }
   base::WeakPtr<ElectronSession> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -99,6 +123,8 @@ class ElectronSession {
   const raw_ref<ElectronApp> app_;
   const std::string name_;
   std::set<std::string> schemes_;
+  std::set<ElectronWebRequestEvent> web_request_events_;
+  std::string user_agent_;
   base::WeakPtrFactory<ElectronSession> weak_factory_{this};
 };
 
@@ -142,6 +168,37 @@ class ElectronDesk {
                           const std::string& data_json) = 0;
   // Closes port `port`'s end in window `id`'s page.
   virtual void ClosePort(const std::string& id, const std::string& port) = 0;
+  // Window `id`'s page loads as `user_agent` from its next navigation on.
+  virtual void SetUserAgent(const std::string& id,
+                            const std::string& user_agent) = 0;
+
+  // An app session's storage, in `partition`. Each runs `done` once, which
+  // may be after the app has gone.
+  //
+  // The cookies a request to `url` would send, or every cookie without one.
+  virtual void GetCookies(
+      const WebViewPartition& partition,
+      const std::optional<GURL>& url,
+      base::OnceCallback<void(std::vector<ElectronCookie>)> done) = 0;
+  // Sets a cookie, or says why it could not.
+  virtual void SetCookie(
+      const WebViewPartition& partition,
+      const ElectronCookieDetails& details,
+      base::OnceCallback<void(std::optional<std::string> why)> done) = 0;
+  // Removes cookie `name` that a request to `url` would send.
+  virtual void RemoveCookie(const WebViewPartition& partition,
+                            const GURL& url,
+                            const std::string& name,
+                            base::OnceClosure done) = 0;
+  // Writes the cookies to disk.
+  virtual void FlushCookies(const WebViewPartition& partition,
+                            base::OnceClosure done) = 0;
+  virtual void ClearStorage(const WebViewPartition& partition,
+                            const ElectronClearStorage& clear,
+                            base::OnceClosure done) = 0;
+  // The HTTP cache.
+  virtual void ClearCache(const WebViewPartition& partition,
+                          base::OnceClosure done) = 0;
 };
 
 // One connection to the Electron socket: one running app. Turns its request
@@ -190,9 +247,31 @@ class ElectronApp {
     bool streaming = false;
   };
 
+  // A request waiting on the app's answer to one of its webRequest events.
+  struct Ask {
+    ElectronWebRequestEvent event;
+    ElectronWebRequestAnswered answered;
+  };
+
   // Session `name`, made the first time the app names it.
   ElectronSession& SessionNamed(const std::string& name);
   void HandleProtocol(const ElectronHandleProtocol& handle);
+  void ListenForWebRequests(ElectronWebRequestListen listen);
+  void SendWebRequest(const std::string& session,
+                      ElectronWebRequestEvent event,
+                      std::optional<int> ask,
+                      const std::optional<std::string>& window,
+                      const ElectronWebRequestDetails& details);
+  void StartAsk(const std::string& session,
+                ElectronWebRequestEvent event,
+                const std::optional<std::string>& window,
+                const ElectronWebRequestDetails& details,
+                ElectronWebRequestAnswered answered);
+  void Answer(ElectronWebRequestAnswer answer);
+  // A call on one of the app's sessions, answered with a session_result.
+  void RunSessionCall(ElectronSessionCall call);
+  void SessionCallDone(int call,
+                       base::expected<base::Value, std::string> result);
   void StartFetch(const std::string& session,
                   ElectronFetch fetch,
                   std::unique_ptr<ElectronResponder> responder);
@@ -245,6 +324,9 @@ class ElectronApp {
   // The pages' protocol requests waiting on the app, by number.
   std::map<int, Pending> fetches_;
   int next_fetch_ = 1;
+  // The requests waiting on the app's webRequest listeners, by ask.
+  std::map<int, Ask> asks_;
+  int next_ask_ = 1;
   base::WeakPtrFactory<ElectronApp> weak_factory_{this};
 };
 

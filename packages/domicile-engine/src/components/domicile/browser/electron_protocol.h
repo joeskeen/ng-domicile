@@ -5,6 +5,7 @@
 #define COMPONENTS_DOMICILE_BROWSER_ELECTRON_PROTOCOL_H_
 
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -66,6 +67,16 @@ namespace domicile {
 //   {"type":"protocol_end","request":5}    (or with "error":"...")
 //   {"type":"protocol_response","request":5,"error":"..."}
 //                                          (the handler failed)
+//   {"type":"web_request_listen","session":"",
+//    "events":["before_request","completed"]}
+//                                          (the session's webRequest
+//                                           listeners, all of them)
+//   {"type":"web_request_answer","ask":9,"cancel":true}
+//   {"type":"web_request_answer","ask":9,"redirect_url":"https://..."}
+//   {"type":"web_request_answer","ask":10,"request_headers":[["a","1"]]}
+//   {"type":"web_request_answer","ask":11,"response_headers":[["b","2"]],
+//    "status_line":"HTTP/1.1 200 OK"}      (a listener's answer; {} with
+//                                           only "ask" changes nothing)
 //
 // The engine also says, on its own:
 //
@@ -94,6 +105,24 @@ namespace domicile {
 //                                           its session handles; answer
 //                                           with protocol_response. "body"
 //                                           only when it has one)
+//   {"type":"web_request","event":"before_request","ask":9,"id":4,
+//    "session":"","window":1,"url":"https://claude.ai/","method":"GET",
+//    "resource_type":"mainFrame","referrer":""}
+//                                          (an event of a request in a
+//                                           session with listeners for it.
+//                                           "ask" when the request waits
+//                                           for web_request_answer:
+//                                           before_request,
+//                                           before_send_headers and
+//                                           headers_received. "window" when
+//                                           a window's page made it. The
+//                                           others: send_headers,
+//                                           response_started,
+//                                           before_redirect, completed and
+//                                           error_occurred, with headers,
+//                                           status_code, status_line,
+//                                           redirect_url, error, from_cache
+//                                           and ip as each knows them)
 //
 // The host picks window numbers. A window opens http and https URLs, and
 // file: and the app's own schemes once its session handles them: the app
@@ -249,6 +278,194 @@ struct ElectronReply {
   base::expected<base::Value, std::string> answer;
 };
 
+// session.webRequest's events, in the order a request meets them.
+enum class ElectronWebRequestEvent {
+  kBeforeRequest,
+  kBeforeSendHeaders,
+  kSendHeaders,
+  kHeadersReceived,
+  kResponseStarted,
+  kBeforeRedirect,
+  kCompleted,
+  kErrorOccurred,
+};
+
+// `event`'s name on the wire: "before_request", "headers_received"...
+std::string_view ElectronWebRequestEventName(ElectronWebRequestEvent event);
+
+// Whether a request waits for the app's answer to `event`: onBeforeRequest,
+// onBeforeSendHeaders and onHeadersReceived. The rest only tell the app.
+bool IsBlockingElectronWebRequestEvent(ElectronWebRequestEvent event);
+
+// Session `session` has webRequest listeners for `events` and no others.
+struct ElectronWebRequestListen {
+  std::string session;
+  std::set<ElectronWebRequestEvent> events;
+
+  friend bool operator==(const ElectronWebRequestListen&,
+                         const ElectronWebRequestListen&) = default;
+};
+
+// A listener's answer to a waiting event, ask `ask`. Empty, it changes
+// nothing; which fields an event may carry is ElectronApp's to check.
+struct ElectronWebRequestAnswer {
+  int ask = 0;
+  bool cancel = false;
+  // onBeforeRequest's redirectURL.
+  std::optional<GURL> redirect_url;
+  // onBeforeSendHeaders's requestHeaders: all of them, replacing the
+  // request's.
+  std::optional<ElectronHeaders> request_headers;
+  // onHeadersReceived's responseHeaders and statusLine, replacing the
+  // response's.
+  std::optional<ElectronHeaders> response_headers;
+  std::optional<std::string> status_line;
+
+  friend bool operator==(const ElectronWebRequestAnswer&,
+                         const ElectronWebRequestAnswer&) = default;
+};
+
+// A request as session.webRequest's listeners see it. What an event does not
+// know yet is left out.
+struct ElectronWebRequestDetails {
+  // The same for each of one request's events, redirects included.
+  int id = 0;
+  GURL url;
+  std::string method;
+  // Electron's resourceType: "mainFrame", "subFrame", "script", "xhr"...
+  std::string resource_type;
+  std::string referrer;
+  std::optional<ElectronHeaders> request_headers;
+  std::optional<ElectronHeaders> response_headers;
+  std::optional<int> status_code;
+  std::optional<std::string> status_line;
+  // onBeforeRedirect's redirectURL.
+  std::optional<GURL> redirect_url;
+  // onErrorOccurred's error, as Electron names it: "net::ERR_ABORTED".
+  std::optional<std::string> error;
+  bool from_cache = false;
+  std::optional<std::string> ip;
+};
+
+// A cookie as Electron's session.cookies shows it.
+struct ElectronCookie {
+  std::string name;
+  std::string value;
+  std::string domain;
+  bool host_only = false;
+  std::string path;
+  bool secure = false;
+  bool http_only = false;
+  // Seconds since the epoch; none for a session cookie.
+  std::optional<double> expiration_date;
+  // "unspecified", "no_restriction", "lax" or "strict".
+  std::string same_site = "unspecified";
+
+  friend bool operator==(const ElectronCookie&,
+                         const ElectronCookie&) = default;
+};
+
+// cookies.get's filter. What it leaves out matches any cookie.
+struct ElectronCookieFilter {
+  // The cookies a request to `url` would send.
+  std::optional<GURL> url;
+  std::optional<std::string> name;
+  // This domain or one inside it.
+  std::optional<std::string> domain;
+  std::optional<std::string> path;
+  std::optional<bool> secure;
+  std::optional<bool> session;
+  std::optional<bool> http_only;
+
+  friend bool operator==(const ElectronCookieFilter&,
+                         const ElectronCookieFilter&) = default;
+};
+
+// Whether `cookie` passes `filter`, but for its url, which picks the
+// cookies to look through.
+bool ElectronCookieMatches(const ElectronCookie& cookie,
+                           const ElectronCookieFilter& filter);
+
+// cookies.set's details.
+struct ElectronCookieDetails {
+  GURL url;
+  std::string name;
+  std::string value;
+  std::optional<std::string> domain;
+  std::optional<std::string> path;
+  bool secure = false;
+  bool http_only = false;
+  std::optional<double> expiration_date;
+  std::string same_site = "lax";
+
+  friend bool operator==(const ElectronCookieDetails&,
+                         const ElectronCookieDetails&) = default;
+};
+
+struct ElectronGetCookies {
+  ElectronCookieFilter filter;
+  friend bool operator==(const ElectronGetCookies&,
+                         const ElectronGetCookies&) = default;
+};
+struct ElectronSetCookie {
+  ElectronCookieDetails details;
+  friend bool operator==(const ElectronSetCookie&,
+                         const ElectronSetCookie&) = default;
+};
+// cookies.remove: cookie `name` that a request to `url` would send.
+struct ElectronRemoveCookie {
+  GURL url;
+  std::string name;
+  friend bool operator==(const ElectronRemoveCookie&,
+                         const ElectronRemoveCookie&) = default;
+};
+// cookies.flushStore.
+struct ElectronFlushCookies {
+  friend bool operator==(const ElectronFlushCookies&,
+                         const ElectronFlushCookies&) = default;
+};
+// session.clearStorageData: `storages` (Electron's names; none is all) of
+// `origin` (none is every origin).
+struct ElectronClearStorage {
+  std::optional<GURL> origin;
+  std::set<std::string> storages;
+  friend bool operator==(const ElectronClearStorage&,
+                         const ElectronClearStorage&) = default;
+};
+// session.clearCache.
+struct ElectronClearCache {
+  friend bool operator==(const ElectronClearCache&,
+                         const ElectronClearCache&) = default;
+};
+// session.setUserAgent, for the session's pages from now on.
+struct ElectronSetUserAgent {
+  std::string user_agent;
+  friend bool operator==(const ElectronSetUserAgent&,
+                         const ElectronSetUserAgent&) = default;
+};
+
+using ElectronSessionMethod = std::variant<ElectronGetCookies,
+                                           ElectronSetCookie,
+                                           ElectronRemoveCookie,
+                                           ElectronFlushCookies,
+                                           ElectronClearStorage,
+                                           ElectronClearCache,
+                                           ElectronSetUserAgent>;
+
+// A call on session `session`, which the engine answers with
+// ElectronSessionResult under `call`.
+struct ElectronSessionCall {
+  int call = 0;
+  std::string session;
+  ElectronSessionMethod method;
+
+  friend bool operator==(const ElectronSessionCall&,
+                         const ElectronSessionCall&) = default;
+};
+
+// The storages session.clearStorageData knows, by Electron's names.
+bool IsElectronStorage(std::string_view storage);
+
 using ElectronRequest = std::variant<ElectronHello,
                                      ElectronOpenWindow,
                                      ElectronLoadUrl,
@@ -263,7 +480,10 @@ using ElectronRequest = std::variant<ElectronHello,
                                      ElectronHandleProtocol,
                                      ElectronProtocolResponse,
                                      ElectronProtocolData,
-                                     ElectronProtocolEnd>;
+                                     ElectronProtocolEnd,
+                                     ElectronWebRequestListen,
+                                     ElectronWebRequestAnswer,
+                                     ElectronSessionCall>;
 
 // Why a line is not a request, and which window or protocol request it was
 // for when it names one, so the app hears of it as that window's and the
@@ -272,6 +492,8 @@ struct ElectronRefusal {
   std::string why;
   std::optional<ElectronWindow> window;
   std::optional<int> request;
+  // The session call it was, which the app hears failed.
+  std::optional<int> call;
 
   friend bool operator==(const ElectronRefusal&,
                          const ElectronRefusal&) = default;
@@ -291,6 +513,14 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
 // The lines the engine sends, each ending in a newline.
 // `schemes` are the apps' own schemes the engine registered as it started.
 std::string ElectronReady(const std::vector<ElectronScheme>& schemes);
+// The answer to session call `call`: its result (null when it has none), or
+// why it failed.
+std::string ElectronSessionResult(
+    int call,
+    const base::expected<base::Value, std::string>& result);
+// `cookie` as cookies.get gives it.
+base::DictValue ElectronCookieValue(const ElectronCookie& cookie);
+
 std::string ElectronRefused(std::string_view why);
 std::string ElectronWindowOpened(ElectronWindow window);
 std::string ElectronWindowRefused(ElectronWindow window, std::string_view why);
@@ -317,6 +547,14 @@ std::string ElectronPortMessage(ElectronWindow window,
                                 const base::Value& data);
 std::string ElectronPortClosed(ElectronWindow window, std::string_view port);
 std::string ElectronPageGone(ElectronWindow window);
+// Event `event` of a request in session `session`, made by window
+// `window`'s page when it was one. `ask` is set when the request waits for
+// web_request_answer.
+std::string ElectronWebRequest(ElectronWebRequestEvent event,
+                               std::optional<int> ask,
+                               std::optional<ElectronWindow> window,
+                               std::string_view session,
+                               const ElectronWebRequestDetails& details);
 std::string ElectronProtocolRequest(int request,
                                     std::string_view session,
                                     const ElectronFetch& fetch);

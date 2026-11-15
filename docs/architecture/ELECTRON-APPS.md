@@ -148,8 +148,31 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 - **Not yet:** a handler's redirect (the load fails loudly), a request body
   that is a file or a stream, and requests from an Electron page's workers,
   which go to the network.
-- **`session.webRequest`**, cookies and `setPermissionRequestHandler` apply
-  to the app's partition only.
+- **`session.webRequest`**: `web_request_listen` names the events a
+  session has listeners for. Each of its pages' network requests then meets
+  them in Electron's order. `onBeforeRequest` may cancel or redirect,
+  `onBeforeSendHeaders` may replace the request's headers, and
+  `onHeadersReceived` may cancel or replace the response's headers and
+  status line; a document's CSP and Permissions-Policy follow the new
+  headers. The request waits for each of those three
+  (`web_request_answer`). `onSendHeaders`, `onResponseStarted`,
+  `onBeforeRedirect`, `onCompleted` and `onErrorOccurred` only tell the app
+  ([`domicile_electron_web_request.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_web_request.h)).
+  An answer that changes what its event cannot, or an app that goes while a
+  request waits, cancels the request. Not yet: the headers the network
+  service adds (cookies among them) are not in `requestHeaders`, a
+  redirect `onHeadersReceived` writes is not followed, a redirect to a
+  scheme the web cannot reach is refused, and WebSockets and workers' requests
+  pass by the listeners.
+- **Session calls** (`session_call`, answered by `session_result` under
+  the same `call`): `cookies.get`, `set`, `remove` and `flushStore`,
+  `clearStorageData`, `clearCache` and `setUserAgent`, each on one of the
+  app's sessions and so on its partition only. `cookies.get` gives every
+  cookie a request to its `url` could carry, HTTP-only and cross-site ones
+  included, as Electron does. A session's user agent reaches its open
+  windows from their next navigation and its new windows before their first
+  ([`domicile_electron_storage.h`](../../packages/domicile-engine/src/chrome/browser/domicile/domicile_electron_storage.h)).
+  Not yet: `cookies.on('changed')`, and `setPermissionRequestHandler`.
 
 ### Desktop pieces
 
@@ -233,8 +256,11 @@ Inspected 2026-11-13: every `.node` file's imports and every window's
 - [x] `electron-host`: `sendSync`, `postMessage`, `MessageChannelMain`
 - [x] engine: `protocol.handle`, `loadFile` and sessions
 - [x] engine: an app's own schemes, registered at start
-- [ ] engine: `webRequest`, cookies, permission handlers, storage clearing
+- [x] engine: `webRequest`
+- [x] engine: cookies, storage clearing, `clearCache`, `setUserAgent`
+- [ ] engine: permission handlers
 - [x] `electron-host`: `protocol.handle`, `loadFile`, `session.fromPartition`
+- [ ] `electron-host`: `session.webRequest`
 - [ ] `WebContentsView`, `BrowserView`, `utilityProcess`
 - [ ] tray, notifications, `dialog`, `nativeTheme`, `shell`, `safeStorage`, `desktopCapturer`, clipboard
 - [ ] app menus: a menu bar under the window's tab; Alt toggles it

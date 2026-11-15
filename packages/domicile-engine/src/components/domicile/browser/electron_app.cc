@@ -61,6 +61,25 @@ void ElectronSession::Fetch(ElectronFetch fetch,
   app_->StartFetch(name_, std::move(fetch), std::move(responder));
 }
 
+bool ElectronSession::ListensFor(ElectronWebRequestEvent event) const {
+  return web_request_events_.contains(event);
+}
+
+void ElectronSession::AskWebRequest(ElectronWebRequestEvent event,
+                                    const std::optional<std::string>& window,
+                                    ElectronWebRequestDetails details,
+                                    ElectronWebRequestAnswered answered) {
+  CHECK(IsBlockingElectronWebRequestEvent(event));
+  app_->StartAsk(name_, event, window, details, std::move(answered));
+}
+
+void ElectronSession::TellWebRequest(ElectronWebRequestEvent event,
+                                     const std::optional<std::string>& window,
+                                     ElectronWebRequestDetails details) {
+  CHECK(!IsBlockingElectronWebRequestEvent(event));
+  app_->SendWebRequest(name_, event, std::nullopt, window, details);
+}
+
 ElectronApp::ElectronApp(ElectronDesk& desk,
                          Send send,
                          std::vector<ElectronScheme> schemes)
@@ -69,6 +88,12 @@ ElectronApp::ElectronApp(ElectronDesk& desk,
 ElectronApp::~ElectronApp() {
   for (const auto& [number, window] : windows_) {
     desk_->Close(window.id);
+  }
+  // A request the app's listener never answered does not go ahead as if it
+  // had said nothing.
+  for (auto& [number, ask] : std::exchange(asks_, {})) {
+    std::move(ask.answered)
+        .Run(ElectronWebRequestAnswer{.ask = number, .cancel = true});
   }
 }
 
@@ -80,6 +105,9 @@ void ElectronApp::Take(std::string_view line) {
         ElectronWindowRefused(*request.error().window, request.error().why));
   } else if (!request.has_value() && request.error().request.has_value()) {
     FailRequest(*request.error().request, request.error().why);
+  } else if (!request.has_value() && request.error().call.has_value()) {
+    send_.Run(ElectronSessionResult(*request.error().call,
+                                    base::unexpected(request.error().why)));
   } else if (!request.has_value()) {
     send_.Run(ElectronRefused(request.error().why));
   } else if (const auto* hello = std::get_if<ElectronHello>(&*request)) {
@@ -135,6 +163,12 @@ void ElectronApp::Take(std::string_view line) {
     ReceiveData(std::move(*data));
   } else if (auto* end = std::get_if<ElectronProtocolEnd>(&*request)) {
     EndBody(*end);
+  } else if (auto* listen = std::get_if<ElectronWebRequestListen>(&*request)) {
+    ListenForWebRequests(std::move(*listen));
+  } else if (auto* answer = std::get_if<ElectronWebRequestAnswer>(&*request)) {
+    Answer(std::move(*answer));
+  } else if (auto* call = std::get_if<ElectronSessionCall>(&*request)) {
+    RunSessionCall(std::move(*call));
   } else {
     const auto& destroy = std::get<ElectronDestroyWindow>(*request);
     if (const std::optional<std::string> id = IdOf(destroy.window)) {
@@ -213,11 +247,93 @@ void ElectronApp::Open(const ElectronOpenWindow& open) {
     send_.Run(
         ElectronWindowRefused(open.window, "there is no shell to open it in"));
   } else {
+    // The session's user agent reaches the desk through the session, before
+    // the window's first navigation.
     windows_.emplace(
         open.window,
         Window{.id = *id, .title = std::string(), .session = open.session});
     send_.Run(ElectronWindowOpened(open.window));
   }
+}
+
+void ElectronApp::RunSessionCall(ElectronSessionCall call) {
+  base::expected<WebViewPartition, std::string> partition =
+      ElectronSessionPartition(hello_->partition, call.session);
+  if (!partition.has_value()) {
+    send_.Run(
+        ElectronSessionResult(call.call, base::unexpected(partition.error())));
+    return;
+  }
+  const int number = call.call;
+  auto done = base::BindOnce(&ElectronApp::SessionCallDone,
+                             weak_factory_.GetWeakPtr(), number);
+  auto done_with_nothing =
+      [](base::OnceCallback<void(base::expected<base::Value, std::string>)>
+             done) {
+        return base::BindOnce(
+            [](base::OnceCallback<void(
+                   base::expected<base::Value, std::string>)> done) {
+              std::move(done).Run(base::Value());
+            },
+            std::move(done));
+      };
+  if (auto* get = std::get_if<ElectronGetCookies>(&call.method)) {
+    desk_->GetCookies(
+        *partition, get->filter.url,
+        base::BindOnce(
+            [](ElectronCookieFilter filter,
+               base::OnceCallback<void(
+                   base::expected<base::Value, std::string>)> done,
+               std::vector<ElectronCookie> cookies) {
+              base::ListValue matching;
+              for (const ElectronCookie& cookie : cookies) {
+                if (ElectronCookieMatches(cookie, filter)) {
+                  matching.Append(ElectronCookieValue(cookie));
+                }
+              }
+              std::move(done).Run(base::Value(std::move(matching)));
+            },
+            get->filter, std::move(done)));
+  } else if (auto* set = std::get_if<ElectronSetCookie>(&call.method)) {
+    desk_->SetCookie(
+        *partition, set->details,
+        base::BindOnce(
+            [](base::OnceCallback<void(
+                   base::expected<base::Value, std::string>)> done,
+               std::optional<std::string> why) {
+              if (why.has_value()) {
+                std::move(done).Run(base::unexpected(std::move(*why)));
+              } else {
+                std::move(done).Run(base::Value());
+              }
+            },
+            std::move(done)));
+  } else if (auto* remove = std::get_if<ElectronRemoveCookie>(&call.method)) {
+    desk_->RemoveCookie(*partition, remove->url, remove->name,
+                        done_with_nothing(std::move(done)));
+  } else if (std::holds_alternative<ElectronFlushCookies>(call.method)) {
+    desk_->FlushCookies(*partition, done_with_nothing(std::move(done)));
+  } else if (auto* clear = std::get_if<ElectronClearStorage>(&call.method)) {
+    desk_->ClearStorage(*partition, *clear, done_with_nothing(std::move(done)));
+  } else if (std::holds_alternative<ElectronClearCache>(call.method)) {
+    desk_->ClearCache(*partition, done_with_nothing(std::move(done)));
+  } else {
+    const std::string& user_agent =
+        std::get<ElectronSetUserAgent>(call.method).user_agent;
+    SessionNamed(call.session).user_agent_ = user_agent;
+    for (const auto& [number_of_window, window] : windows_) {
+      if (window.session == call.session) {
+        desk_->SetUserAgent(window.id, user_agent);
+      }
+    }
+    std::move(done).Run(base::Value());
+  }
+}
+
+void ElectronApp::SessionCallDone(
+    int call,
+    base::expected<base::Value, std::string> result) {
+  send_.Run(ElectronSessionResult(call, result));
 }
 
 void ElectronApp::Reply(ElectronReply reply) {
@@ -291,6 +407,83 @@ ElectronSession& ElectronApp::SessionNamed(const std::string& name) {
     session = std::make_unique<ElectronSession>(*this, name);
   }
   return *session;
+}
+
+void ElectronApp::ListenForWebRequests(ElectronWebRequestListen listen) {
+  // Checked as handle_protocol's session is.
+  base::expected<WebViewPartition, std::string> partition =
+      ElectronSessionPartition(hello_->partition, listen.session);
+  if (!partition.has_value()) {
+    send_.Run(ElectronRefused(partition.error()));
+    return;
+  }
+  SessionNamed(listen.session).web_request_events_ = std::move(listen.events);
+}
+
+void ElectronApp::SendWebRequest(const std::string& session,
+                                 ElectronWebRequestEvent event,
+                                 std::optional<int> ask,
+                                 const std::optional<std::string>& window,
+                                 const ElectronWebRequestDetails& details) {
+  std::optional<ElectronWindow> number;
+  if (window.has_value()) {
+    const auto found = std::ranges::find(
+        windows_, *window, [](const auto& entry) -> const std::string& {
+          return entry.second.id;
+        });
+    if (found != windows_.end()) {
+      number = found->first;
+    }
+  }
+  send_.Run(ElectronWebRequest(event, ask, number, session, details));
+}
+
+void ElectronApp::StartAsk(const std::string& session,
+                           ElectronWebRequestEvent event,
+                           const std::optional<std::string>& window,
+                           const ElectronWebRequestDetails& details,
+                           ElectronWebRequestAnswered answered) {
+  const int number = next_ask_++;
+  asks_.emplace(number, Ask{.event = event, .answered = std::move(answered)});
+  SendWebRequest(session, event, number, window, details);
+}
+
+void ElectronApp::Answer(ElectronWebRequestAnswer answer) {
+  auto found = asks_.find(answer.ask);
+  if (found == asks_.end()) {
+    send_.Run(
+        ElectronRefused(base::StrCat({"no web request is waiting for answer ",
+                                      base::NumberToString(answer.ask)})));
+    return;
+  }
+  Ask ask = std::move(found->second);
+  asks_.erase(found);
+  // What each listener's answer may change, as in Electron.
+  const char* stray = nullptr;
+  if (answer.redirect_url.has_value() &&
+      ask.event != ElectronWebRequestEvent::kBeforeRequest) {
+    stray = "redirect_url";
+  } else if (answer.request_headers.has_value() &&
+             ask.event != ElectronWebRequestEvent::kBeforeSendHeaders) {
+    stray = "request_headers";
+  } else if (answer.response_headers.has_value() &&
+             ask.event != ElectronWebRequestEvent::kHeadersReceived) {
+    stray = "response_headers";
+  } else if (answer.status_line.has_value() &&
+             ask.event != ElectronWebRequestEvent::kHeadersReceived) {
+    stray = "status_line";
+  }
+  if (stray != nullptr) {
+    // The app's bug fails the request, rather than letting it through as if
+    // the app had not asked for a change.
+    send_.Run(ElectronRefused(
+        base::StrCat({"an answer to ", ElectronWebRequestEventName(ask.event),
+                      " cannot set ", stray})));
+    std::move(ask.answered)
+        .Run(ElectronWebRequestAnswer{.ask = answer.ask, .cancel = true});
+    return;
+  }
+  std::move(ask.answered).Run(std::move(answer));
 }
 
 void ElectronApp::HandleProtocol(const ElectronHandleProtocol& handle) {

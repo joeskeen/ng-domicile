@@ -35,17 +35,30 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4, SurfaceBacklog 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, BrowserWindowListing 3, ShellWindowWait 4, ShellSwap 8,
-# DeskCursorThemeSource 2, XCursorTheme 5, XCursorThemeDirectory 4,
+# DeskCursorThemeSource 3, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4, DeskActivity 2,
 # DeskPointer 5, PointerWarp 10, PointerConfinementBoxes 4, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
 # LocaleFallback 2, DomicileLcdTextActivation 2, Rtkit 1, DeskGestures 14,
 # NativeGestureSequence 3, EdgeSwipe 10, DeskPointerHiding 2, PointerHiding 8,
-# InputMethodLines 7, DeskModifierTaps 11, TapModifierOf 1, IdentityDialog 11,
-# PictureInPictureVideos 14, ElectronProtocol 30, ElectronApp 36,
+# InputMethodLines 7, DeskModifierTaps 13, TapModifierOf 1, IdentityDialog 11,
+# PictureInPictureVideos 14, ElectronProtocol 42, ElectronApp 47,
 # ElectronSchemes 8,
 # ContextBridge 11, ContextMenu 13, UnacceleratedMotion 5, WarpLanding 4.
 #
+# 799, and it was 798 — a window that has not drawn keeping its frames
+# unthrottled is one more FrameSinkBroker case. Before that
+# 798, and it was 787 — an Electron app's session calls (cookies, storage,
+# cache, user agent) are six more ElectronProtocol cases and five more
+# ElectronApp ones. Before that
+# 787, and it was 785 — a Super tap held too long, and how long it was held,
+# are two more DeskModifierTaps cases. Before that
+# 785, and it was 784 — dropping the desk's pointer theme being an error is
+# one more DeskCursorThemeSource case. Before that
+# 784, and it was 783 — the tray menu's extension entries are one more
+# case. Before that
+# 783, and it was 771 — an Electron app's webRequest listeners are six more
+# ElectronProtocol cases and six more ElectronApp ones. Before that
 # 771, and it was 762 — Electron apps' own schemes, registered at start, are
 # eight ElectronSchemes cases (one moved from ElectronProtocol), one more
 # ElectronProtocol case and one more ElectronApp one. Before that
@@ -257,7 +270,7 @@ FILTER='PinchMetadataTest.*:ScrollMetadataTest.*:FrameSinkBrokerTest.*:WindowDif
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=771
+FLOOR=799
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
