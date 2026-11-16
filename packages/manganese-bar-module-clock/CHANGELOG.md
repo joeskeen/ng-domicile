@@ -1,5 +1,17 @@
 # @domicile-desktop/manganese-bar-module-clock
 
+## 1.0.4
+
+### Patch Changes
+
+- 0b38007: A bar clock without seconds now wakes the shell every 5 seconds instead of every second, and redraws only on the minute. The lock screen's clock no longer ticks while the desktop is unlocked.
+- Updated dependencies [14704ae]
+- Updated dependencies [4799f21]
+- Updated dependencies [382819f]
+- Updated dependencies [3600d3b]
+- Updated dependencies [69247ca]
+  - @domicile-desktop/component-library@2.2.0
+
 ## 1.0.3
 
 ### Patch Changes

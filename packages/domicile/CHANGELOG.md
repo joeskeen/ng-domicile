@@ -1,5 +1,186 @@
 # domicile
 
+## 1.3.0
+
+### Minor Changes
+
+- cda79ce: An Electron app's own schemes (`app://` and the like) now reach the engine. When an app registers a scheme the engine doesn't have yet, `electron-host` keeps it in `$XDG_STATE_HOME/domicile/electron-schemes.json` and the app runs on its own Electron this time; from the next engine start, `domicile` registers every kept scheme and the app runs on the engine.
+- 291a7ee: An Electron app's window runs its preload. `open_window` on the Electron socket takes the preload's source, which the engine runs in its own isolated world before the page's scripts, with `require("electron")` giving it `contextBridge.exposeInMainWorld` and `ipcRenderer`. `ipcRenderer.send` and `invoke` reach the app as `ipc_message` and `ipc_invoke`, the app answers with `ipc_reply`, and `ipc_send` reaches the page's listeners. `sendSync` and message ports are not there yet. See docs/architecture/ELECTRON-APPS.md.
+- 8ff882e: Extensions can run in private windows. Each extension's chrome://extensions settings are now yours to set: whether it runs in private windows and on local files, whether it may run user scripts, and which sites it runs on (when you click it, on specific sites, or on all sites). Set them in the config's `extensions.settings`, by extension id, or in the Settings app, which shows the ones an extension can use while it is on and moves Options and Uninstall to the bottom of its row. A setting the config drops goes back to Chrome's default.
+- 02708ac: Windows can draw in 10-bit (`ARGB2101010`, `ABGR2101010`) and half-float (`ABGR16161616F`) formats, over dmabuf and `wl_shm`, and keep their extra precision on the page. Over `wl_shm` they can also draw in `XRGB2101010`, `XBGR2101010` and `XBGR16161616F`. Output stays 8-bit for now.
+- ebfad4b: A site's "Sign in with" account chooser (Sign in with Google and other account providers) now works, drawn by the shell: over the page after you press the site's button, or in the page's corner when the site offers it on load. Shells get it as the `domicile-identity` event on a browser window's element.
+- d173ce0: A monitor whose EDID reports 10 bits a channel now scans out in 10 bits where the GPU's planes take a 10-bit format, and its link is asked for 10 bits (`max bpc`), so gradients no longer band. Monitors through a DisplayLink dock stay 8-bit.
+- dd0fb71: Games and VM viewers can read how far the mouse moved (`zwp_relative_pointer_v1`), to turn a camera or drive a guest's mouse. A shell's pointer warp sends no relative motion. Locking and confining the pointer come next.
+- 689c56a: `domicile open --electron <entry|path> [-- <command>...]` runs an installed Electron app on the desktop's engine instead of the Electron it ships. It follows the app's desktop entry, through the wrapper scripts packages put around Electron, to the app's `app.asar`, and runs it with `electron-host`, which now ships with Domicile. An app whose page needs Node runs on its own Electron instead, with a notification saying so.
+- f5fbd04: The desk config's `electron.apps` lists desktop file ids of installed Electron apps to run on the desktop's engine. The compositor writes a copy of each entry that runs it with `domicile open --electron`, first on the desk's data directories, so the launcher, links such as `slack://` and notification presses all start it on the engine, whatever the shell.
+- b10e007: The night light now works on a monitor driven in HDR. A gamma ramp there would bend the PQ curve the panel decodes, so the monitor keeps an identity ramp and the night light becomes a color matrix viz applies in linear light (`domicile_displays_set_color_matrix`). `wlr-gamma-control` clients get `failed` on such a monitor, since their ramps assume SDR.
+- 24b88fb: Dragging the title bar or edge an app draws itself, such as a GNOME app's header bar or Firefox's tab strip, moves or resizes its window. The compositor checks the press is still held, takes it from the app, and reports `WindowRequest.Move` or `WindowRequest.Resize` (with a `ResizeEdge`); Manganese runs the drag as it does a Meta drag.
+- d566f68: A cursor an app draws itself, such as a game's, an image editor's brush or a VM viewer's, now shows in place of the arrow. The compositor sends each image the app commits as a PNG on `app_cursor`, and `DomicileWindow.cursorImage` gives it to the shell as a CSS `cursor` value. Manganese sets it on the window's element.
+- 44c2ed4: Add `domicile subscribe [windows|displays|inputs|status]...`, which prints the desktop's windows, displays, input devices and status as JSON lines, then each again whenever it changes, like `swaymsg -t subscribe`.
+- fb07c3f: The config takes a `browser` section: browser profiles, the default and default private profile, and the profile each site opens in. Nothing acts on it yet.
+- e4706b9: `domicile status` prints the shell, theme, keymap, lock, whether the screens
+  are off, what keeps them on and what records or controls the desktop. `--json`
+  for scripts.
+- 87ac040: The compositor serves `xdg-system-bell-v1`, so a terminal's bell reaches the shell. `domicile.windows.bells()` streams each ring with the `appId` of the window that rang.
+- 947e5d3: Input methods such as fcitx5 and IBus now compose text in native windows:
+  preedit shows inline as you type, and the text you pick is committed. On-screen
+  keyboards and other tools that type through `virtual-keyboard-v1` work too. The
+  candidate list is not shown yet, and pages and the shell do not compose from an
+  input method yet.
+- 4c6346e: An Electron app's windows load through its sessions and protocol handlers. `open_window` names a window's session, a partition inside the app's own. `handle_protocol` and `unhandle_protocol` send a session's requests for a scheme to the app as `protocol_request`, which the app answers with `protocol_response` (a whole body, a file, or a stream of `protocol_data` ending in `protocol_end`). A window opens a `file:` URL, or one in the app's own scheme, once its session handles that scheme, which is how `loadFile` works; `http` and `https` go to the network unless the session handles them. See docs/architecture/ELECTRON-APPS.md.
+- 5857069: An Electron app's `setPermissionRequestHandler` answers its pages' permission requests in place of the shell: the engine sends `permission_request` while a session has a `permission_handler`, and the page gets the app's `permission_answer`. See docs/architecture/ELECTRON-APPS.md.
+- bb9f4be: Apps can describe their colors with `wp_color_management_v1`: wide-gamut (Display P3, Adobe RGB, BT.2020) and HDR (PQ, HLG, scRGB) windows are drawn in the colors they mean rather than as sRGB. Every display still describes itself as sRGB until HDR output lands.
+- b9c14d1: Pages and the shell now compose text from an input method such as fcitx5 or
+  IBus, as native windows do. Its candidate list does not show over them yet.
+- 9b20adc: Capture tools that pick a window from the toplevel list, such as `grim` and
+  `wf-recorder` through `ext-image-capture-source-v1`, now see browser windows
+  too, and capture a browser window's page alone.
+- 057faa5: The night light fades in and out instead of snapping, on every monitor including DisplayLink docks. `setColorTemperature` fades from the color drawn.
+- 3e37020: A client asking to be minimized now reaches the shell as `WindowRequest.Minimize`. The shell can also set `WindowState.Resizing` on a window while it resizes it, and the client sees `resizing` in its configure.
+- a85afe8: Electron apps' message boxes reach the shell. The Electron socket asks a box over a window with `show_message_box`, and a browser window list includes the box it shows as `messageBox` (JSON), one at a time. A shell answers with `answerBrowserWindowMessageBox` (`browser.answerMessageBox` in the SDK), and the app hears `message_box_answered` with the button and the checkbox. A window that closes answers its boxes with their cancel buttons.
+- 9bd54ab: The config can name a terminal with `terminal`, such as `["kitty"]`. When it does, applications that run in a terminal, such as htop and vim, show up in the launcher and under "Open with", and `domicile open` runs them in it. Meta+Return opens it in Manganese. Without one, nothing changes: Domicile still has no default terminal.
+- eeb828a: Electron apps can share the screen. `desktopCapturer.getSources` gives one source the desktop's share picker stands for, as Electron does under Wayland, and a page's `getUserMedia()` with `chromeMediaSource: "desktop"` opens that picker, with the source's sound when asked. `session.setDisplayMediaRequestHandler` is accepted, and `getDisplayMedia()` opens the same picker, as Electron's `useSystemPicker` does.
+- b09fd4b: A window's subsurfaces are drawn inside the window itself, as other compositors draw them. Firefox and Tor Browser windows, which draw everything into a subsurface, now move, scale and fade with their window on workspace switches and other animations, and sit under the shell's overlays. Chromium's extension popups do too. Pointer and touch reach the subsurface under them.
+- 0099cfa: Shells and app modules are now cross-origin isolated, with no COOP or COEP headers: `crossOriginIsolated` is true and `SharedArrayBuffer` works, so threaded wasm and tools like the TypeScript language service run. Nothing they load is checked for CORP. Pages in a `<webview>` are unchanged.
+- ed4f85a: A monitor driven in HDR now describes itself to `wp_color_management_v1` clients as HDR10 (BT.2020 with PQ, its SDR white as reference, and its panel's black and peak as the target), instead of sRGB. A window prefers the description of the monitor holding most of it, and its client hears `preferred_changed` when the window moves to a monitor in a different mode or that monitor goes into or out of HDR; each output object hears `image_description_changed` then too.
+- 7e433e1: The engine takes Electron apps on a new socket, `--domicile-electron-socket`, which the desktop passes and names to apps in `DOMICILE_ELECTRON_SOCK`. An app's `electron-host` says hello and opens app windows in the app's own partition, and hears each window load, change its title and close. See docs/architecture/ELECTRON-APPS.md.
+- 60d225a: Add `domicile configure-display <display> <change>...`, which changes a monitor's mode, scale, position, rotation, adaptive sync, HDR and SDR white, or turns it on or off, until the desktop restarts, like `swaymsg output`. `reset` goes back to the config. The changes are laid over the profile that matches the plugged-in monitors, so a hotplug or a config edit keeps them.
+- 0e71fa1: Games and VM viewers can confine the pointer to their window, or the part of it they name, and read raw mouse motion. On a console the engine holds its cursor inside the boxes the shell passes to the new `DomicileHost.confinePointer` (`pointer.confine` in the SDK), across monitors too; `DomicileWindow.pointerRegion` is the client's region. Relative motion now carries the mouse's unaccelerated deltas from libinput as `dx_unaccel`/`dy_unaccel`, so aiming no longer follows pointer acceleration, and a shell's warp still sends no motion. Manganese confines the pointer for the focused window that asks, and follows it as it moves.
+- ec46c2d: An Electron app's sessions take `session_call`s: `cookies.get`, `set`, `remove` and `flushStore`, `clearStorageData`, `clearCache` and `setUserAgent`, each answered by a `session_result`. They act on the session's own partition, and a session's user agent reaches its windows' pages. See docs/architecture/ELECTRON-APPS.md.
+- 19cc2c5: Tapping Super on its own opens and closes the overview, as it does on GNOME and KDE. Holding Super for a shortcut, a drag or a scroll still works as before. Shells can bind a tap of any modifier alone by writing just its name, such as `Meta` or `Alt`, in their keybindings.
+- 0a4d218: The SDK's `Display` gains `hdr` (`unsupported`, `off` or `on`), `peakLuminance` (the panel's peak in cd/m², zero when its EDID reports none) and `sdrWhite` (the white SDR content is shown at while HDR is on), so a shell can offer HDR only on the monitors that take it.
+- 9747fd9: An Electron app's `session.webRequest` listeners see its windows' network requests. `web_request_listen` names a session's events; each request then meets them as `web_request` lines, and `onBeforeRequest`, `onBeforeSendHeaders` and `onHeadersReceived` wait for `web_request_answer`, which may cancel, redirect, or replace the request's or the response's headers. See docs/architecture/ELECTRON-APPS.md.
+- 321a9b0: Add `domicile lock`, `focus-window <id>`, `close-window <id>`, `kill-window <id>` and `inhibit-idle -- <command>`. The window commands take the ids `list-windows` prints. `focus-window` asks the shell to show and focus the window, the same request an app's activation makes. `inhibit-idle` keeps the screens on until the command exits.
+- 8a2777f: Electron apps' views (`WebContentsView`) reach the shell. The Electron socket opens a view with `open_window` and `"view": true`, and places a window's views with `set_views`. Each page's size goes back to the app as `resized`. A browser window list includes each view right after the window that holds it, with `parent`, `x`, `y`, `width`, `height` and `isHidden`, so the shell can draw it where its app asks or lay it out its own way.
+- 53319a2: The engine registers Electron apps' own schemes as it starts, from `--domicile-electron-schemes=app:standard,secure;…`, with Electron's names for the privileges (`standard`, `secure`, `bypassCSP`, `corsEnabled` and `supportFetchAPI`). Every child process gets the switch, so a URL parses the same in each. The Electron socket's `ready` names the schemes registered and their privileges. See docs/architecture/ELECTRON-APPS.md.
+- a5ade39: Games and VM viewers can lock the pointer (`zwp_pointer_constraints_v1`). The compositor offers the lock to the shell for the window under the pointer as `pointerConstraint`, and tells the client only once the shell holds a pointer lock on the window's `<app>` and reports it with `windows.pointerConstrained()`. The engine grants a shell's pointer lock with no click first and no browser bubble. Manganese locks for the focused window and lets go when the keyboard moves away. Confining the pointer to a window is offered but not taken yet.
+- cd75f9a: Picture-in-picture video works: a video's picture-in-picture button, or a site's, floats the video over your windows in the corner of its screen. Drag it to move it, drag an edge to resize it, and point at it for play, pause, track, back-to-tab and close controls. Shells list the videos in `domicile.pictureInPicture` and show one with `<app picture-in-picture="id">`.
+- 8f45df8: `domicile --version` prints the version, the commit it was built from, and the engine's release. A flag `domicile` doesn't take is refused with a short message, rather than passed to the shell builder as a shell.
+- 996cc29: A shell can hear when nobody has been at the desk for a time it chooses (`session.idleAfter`), or a time before the screens blank (`session.idleBeforeBlanking`). These replace `session.idleWarnings` and the `idle.warn_before_seconds` setting, which are gone.
+- d921f45: The engine now builds Electron's Node against its own V8 and BoringSSL, as Electron does, with Electron's patches to Node, V8 and BoringSSL. It is the first step toward Electron apps whose pages use Node running on the engine.
+- 756c1bd: `domicile list-shell-commands` (also `send-shell --help`) prints the commands
+  `send-shell` takes, as the running shell describes them. `send-shell` now fails
+  with the shell's reason when the shell refuses a command or never says it ran
+  it, instead of always succeeding.
+  
+  Breaking: `bindKeys` takes `commands`, describing what `onCommand` runs, and
+  `onCommand` returns `Ok("ran")` or `Err(reason)`. `shell.commands(help)`
+  replaces listening without a description, and `shell.answer(sent, refused)`
+  reports how each command ended. Manganese describes all of its commands.
+- 69247ca: The tray has a menu of every icon at its end. Pin or unpin any app or extension icon, switch extensions on and off, and change what each can do: its options, which websites it can read, private windows, local files and user scripts, or uninstall it. Settings your config sets show locked. Shells get the same through `domicile.extensions.installed`, `setEnabled`, `configure` and `uninstall`. `Menu` holds check, radio and submenu items, and `ListRow` takes `actions` beside a pressed row.
+- c454256: A display profile can drive a monitor in HDR (HDR10) with `hdr: true`, and set how bright ordinary content's white is there with `sdr_white` (203 cd/m² by default). It is off by default and used only where the monitor's EDID takes PQ and its connector scans out in 10 bits. The SDK's config types gain both fields, and Settings reads profiles that set them instead of refusing them.
+- 23cbfe3: Add `domicile list-inputs [--json]`, which prints each keyboard, pointer and touch device the desktop reads: its kind, how it is attached, its USB or Bluetooth ids and its name. The engine reports the devices through a new `input_devices` callback.
+- 85ad296: Electron apps' menu bars reach the shell. The Electron socket sets a window's menu with `set_menu_bar`, and a browser window list includes it as `menu` (the entries as JSON), with `menuBarVisible` and `menuBarAutoHide`. A shell clicks an entry with `clickBrowserWindowMenu`, and the app hears `menu_clicked` with the entry's id. A `<webview>` also fires `domicile-guest-keyup` for a modifier let go of in its page, so a shell can tell an Alt tap from Alt held for a chord.
+- 81215c5: A shell can name any window to a capture tool. Each window's `toplevelId` and each browser window's `toplevelId` is its identifier on `ext-foreign-toplevel-list-v1`, so a shell can hand it to a tool such as `grim -T` instead of matching by title. The compositor sends a native window's on `app_appeared` and the browser windows' on `browser_toplevel_ids`.
+- d0fbc5b: Turn your monitors off on demand with `domicile sleep-displays`, and back on with any key, click or pointer move, or `domicile wake-displays`. Your windows and workspaces stay where they were. Shells get the same through `displays.sleep()` and `displays.wake()`.
+- ff5a1d0: `domicile list-windows` marks private browser windows, and its `--json`
+  gives each browser window's address (`url`) and whether it is private.
+- 25522ef: Set how held keys repeat with `input.keyboard.repeat` (`delay_ms`, `rate`; 0 turns repeat off). Native windows and pages follow it, and a reload applies it without resending the keymap. The default is 500 ms and 25 a second.
+- 8e37f79: `domicile list-displays` prints each display with every name `sleep-displays`
+  takes for it, its mode, layout, HDR and whether it is lit. `domicile
+  list-windows` prints every window, native and browser alike. Both take
+  `--json` for scripts.
+- 5315b06: A video entering picture-in-picture grows out of its place in the page, and "Back to tab" shrinks it back in. Shells read where it was from the video's `source`.
+- e821d1f: A display profile can turn on adaptive sync (variable refresh rate, FreeSync, G-Sync Compatible) per monitor with `adaptive_sync: true`. It is off by default, asked for only where the monitor and driver report support, and retried without it when the driver refuses the modeset. The SDK's `Display` gains `adaptiveSync` (`unsupported`, `off` or `on`), which says what the hardware is doing. Settings now reads profiles that set `refresh` or `adaptive_sync` instead of refusing them.
+- e4f3394: Right-click a video for "Picture in picture", and drag a picture-in-picture video's progress bar to move through it. Shells get the menu's `picture-in-picture` action with `canPictureInPicture` / `inPictureInPicture`, and `pictureInPicture.seek(id, seconds)`.
+- 6aad1fa: CSS `zoom` on an `<app>` zooms a native window's content and keeps it sharp: the client draws at its display's scale times the zoom, at a logical size that much smaller, so its buffer still fills the box. Popups share their window's zoom.
+- da632d6: A shell can give you a way back from a VM or remote desktop viewer that holds your shortcuts. A chord bound `--inhibited Meta+Escape` stays the shell's while that window has the keyboard, and `keyboard.switchShortcutsInhibitor` turns the window's hold off and on. Manganese has a `shortcuts-inhibitor toggle` command to bind to it.
+- 60e7c7e: Settings shows "Not supported" in place of the HDR switch for a plugged-in monitor that can't show HDR. It learns which monitors those are from the new `which_monitors` question, which the compositor answers with each lit monitor's names and HDR state.
+- 5c11ddc: `domicile list-bindings` prints the running shell's keys and gestures in each
+  binding mode and what they run. A shell command can now answer, and
+  `domicile send-shell` prints the answer: Manganese's `get-workspaces` and
+  `get-tree` answer with JSON, as `swaymsg -t get_workspaces` and `get_tree` do.
+  
+  Breaking: `onCommand` may return `Ok({ output })`;
+  `shell.commands(help, bindings)` takes the bindings, which `bindKeys`
+  describes for you; and `shell.answer(sent, ran)` takes the command's `Result`.
+- bf01c26: An Electron app's preload has `ipcRenderer.sendSync` and `ipcRenderer.postMessage` with message ports. `sendSync` reaches the app as `ipc_send_sync`, and the page waits until the app's `ipc_reply`. Ports travel both ways: `ipc_post` carries a message and the ports that went with it, `port_post` and `port_message` carry what goes over a port, and `port_close` and `port_closed` say when one end closed. `page_gone` says a new document replaced a window's page, taking its ports. See docs/architecture/ELECTRON-APPS.md.
+- 1f229ad: An input method's candidate list now shows just under the text cursor in
+  native windows, moves with the cursor as you type, and goes above it near the
+  bottom of the screen.
+- 8c477cc: Name a monitor to turn only that one off, like `domicile sleep-displays DP-1`. It keeps its windows and workspace, and stays off while you use the others until `domicile wake-displays DP-1`. Shells pass the name to `displays.sleep()` and `displays.wake()`.
+- 9ad6193: The night light now warms monitors with no gamma table, such as a DisplayLink dock's.
+- 2a1913f: A display profile can set a monitor's mode and refresh rate. `mode: [W, H]` now lights the monitor at that size, refusing the profile when the monitor does not offer it, and the new `refresh` (in Hz) picks the nearest rate the monitor offers. The SDK's `Display` gains `refreshMhz`, the rate the monitor scans out at.
+
+### Patch Changes
+
+- 4be0576: Firefox takes the mouse. A subsurface whose input region leaves the pointer out, as Firefox's content surface's does, passes it to its window.
+- 70792da: `domicile open --electron` finds apps behind nixpkgs' compiled wrappers, as Claude's and ChatGPT's packages are, and runs them with what those wrappers set.
+  
+  An app's first secret no longer crashes it when the login keyring is locked: the keyring asks to be unlocked, as with the app's own Electron, and a keyring that fails leaves the app without encryption, as Electron does.
+- 70c8440: A window holding a shortcuts inhibitor, such as a VM or a remote desktop viewer, now gets the three- and four-finger swipes and holds the shell binds, as it already gets the shell's key chords.
+- 0bf960f: A night light or gamma change now shows on a monitor at once, even when nothing on it is redrawing.
+- 7dc15f7: Electron apps start again on Domicile's engine. Slack died at start because the engine's Electron had no `app.requestSingleInstanceLock`; it has that now, and every other Electron API an app can call is there too. One the engine can't do yet hands the app to its own Electron with a notification saying so, instead of crashing it.
+  
+  An app whose wrapper script was just written no longer fails to open with "Text file busy" on Domicile's engine.
+  
+  Element and Claude run on the engine from their first start, since the engine now registers their own schemes before they ask.
+- 0246a64: On a console, the pointer shows the desk's cursor theme right after undocking, instead of Chromium's own cursor until it passes over a native window.
+- 193c954: On a console, the pointer keeps the desk's cursor theme when a monitor at another scale appears, such as after undocking. Until the theme loads at the new size, the nearest size already loaded stands in, instead of Chromium's own cursors. A pointer theme that falls back to Chromium's cursors now says why in the journal.
+- 94e5909: Settings reads every key the compositor reads, such as `input.mouse`, `input.touchpad` and `terminal`, instead of refusing the config. Its schema is now `@domicile-desktop/sdk/config-schema`, a Zod schema generated from the compositor's config with its defaults filled in.
+- 07e9ad2: Clicking an app's tray icon, or an entry of its tray menu such as "Show Slack", now shows its window even when it is in a hidden tab, on another monitor or on another workspace.
+- 501a4b1: The flake serves Domicile from a binary cache at `https://packages.domicile-desktop.com/nix`, filled for each commit `stable` moves to, so `nix run` and configs pinned to `stable` download Domicile instead of building it.
+- d91a8a6: Menus from native apps now enter only the displays their window is on and draw at that display's scale, rather than at the densest scale on every display. They follow their window when it moves to another display.
+- 13851e8: Animations no longer stutter on a monitor running adaptive sync. The engine used to treat each page flip on such a monitor as a vsync and push the next frame back by the time the last one took to draw.
+- 7d558a7: PDFs no longer lose thin strokes in their text on a monitor at a lower scale than the desktop's highest, as on a docked laptop.
+- d6d5370: When the desktop falls back to drawing without the graphics card, Domicile now says so in a notification with a "Report it" button, and logs an error.
+- fdc9064: Locking the desktop ends an application's held global shortcut, such as push-to-talk, instead of leaving it active until the next press.
+- ada112b: A PDF no longer goes blank after you switch away from its tab and back.
+- 734b506: `domicile open --electron` gives the app what its wrapper scripts set, such as a preloaded library, programs on `PATH` and extra flags, so an app wrapped by its package (as nixpkgs wraps Element and Claude) runs on the engine as it would on its own Electron.
+- d59061f: The engine is built on Chromium 160, with its fixes and web platform updates.
+- 274e12d: Night light and other color ramps set right after startup or a monitor change now stick, instead of being dropped until the next modeset.
+- d2a68f5: `domicile sleep-displays <name>`, `wake-displays <name>` and a shell's per-display white point find a monitor by any name a profile matches: its connector (`eDP-1`), its panel (`BOE NE135A1M-NY1`) or its output name (`drm-<id>`). Before, a monitor with an EDID name answered only to `drm-<id>`. A name that matches no display, or several, fails listing every display's names. Profiles also match a monitor by its connector.
+- d15f3e6: A page that stays fullscreen after leaving it, so its window looks stuck, is now a bug Domicile reports: a notification with a "Report it" button, and an error in the log.
+- 03dcccf: Holding Super for a moment and letting it go no longer opens the overview: only a quick tap, up to 300 ms, does. Shells can set another limit with `keyboard.grab("Meta", { longestTap })`.
+- f658eb3: Each frame tells a DisplayLink dock only the part of the screen that changed, so its driver should use less CPU.
+- 67875a1: Shells and apps can start Web Workers, dedicated or shared, classic or module, from their own files.
+- 46aca63: A window on another workspace or behind a tab no longer keeps the display compositor waking at the screen's refresh rate, which kept the panel from saving power while idle.
+- 6642166: A desktop running a checked engine, as `main` does between an engine change and the next nightly build, says so in a notification and points you to stable or a release.
+- ead2330: A monitor whose page flip never finishes, as a DisplayLink dock's can, no longer freezes the whole desktop.
+- ed5a83e: Fix memory filling up until the desktop crashes when every app draws with the GPU. The compositor now lets go of a window's old graphics buffers once the app frees them.
+- 85bdbf2: Sleeping, waking or unplugging the monitor the shell runs on no longer restarts the shell.
+- e7a6ae6: `domicile load-shell` serves a prebuilt JavaScript shell as it is even when its text reads like an import, such as `"Turn on notifications from 'fixture'"`. It now parses the module and reads only its real imports.
+- 5ef4689: Typing in a window ends a group selection (Meta+A) around it. `<app>` and `<webview>` fire `domicile-key-delivered`, which names no key, for each key press their window gets.
+- 78e8b7f: A screenshot or screen cast the engine can't capture now fails at once with the cause, instead of timing out. Nested in a Wayland session whose GPU can't make dmabufs, captures now come in shared memory, so `domicile screenshot` works there.
+- bce2815: Pinching a PDF no longer magnifies its rendered image, which pixelated its text. Only the PDF viewer zooms it.
+- d3978bb: Electron apps' views show in their windows. The SDK lists them in `domicile.browser.views`, apart from `domicile.browser.windows`, so window lists, task switchers and tiling never treat a view as a window. Manganese draws each view over its window's page where its app asks, hides it while the app hides it, treats a click in it as a click in the window, and runs the app's menu keys pressed in it.
+- fdee121: Fix the lock screen not getting typed keys when a window had the keyboard as the desk locked. Locking now gives the keyboard to the page, and the engine keeps every key on the page while locked, logging an error if a window still has the keyboard.
+- 7d9d62f: An app at a fractional scale, such as 1.5 or 1.2, no longer redraws its whole window on screen for every frame. Only the part that changed is redrawn. A DisplayLink dock compresses much less, which saves CPU and battery.
+- Updated dependencies [14704ae]
+- Updated dependencies [8ff882e]
+- Updated dependencies [9f22031]
+- Updated dependencies [94e5909]
+- Updated dependencies [24b88fb]
+- Updated dependencies [4b7a878]
+- Updated dependencies [3600d3b]
+- Updated dependencies [5090cbd]
+- Updated dependencies [0ee4ce8]
+- Updated dependencies [a5ade39]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [996cc29]
+- Updated dependencies [756c1bd]
+- Updated dependencies [69247ca]
+- Updated dependencies [c454256]
+- Updated dependencies [876c824]
+- Updated dependencies [9ea68bf]
+- Updated dependencies [04baee9]
+- Updated dependencies [eaa92c7]
+- Updated dependencies [1209f22]
+- Updated dependencies [5315b06]
+- Updated dependencies [e821d1f]
+- Updated dependencies [e4f3394]
+- Updated dependencies [d1b3ab9]
+- Updated dependencies [da632d6]
+- Updated dependencies [60e7c7e]
+- Updated dependencies [d3978bb]
+- Updated dependencies [5c11ddc]
+  - @domicile-desktop/manganese@1.3.0
+  - @domicile-desktop/app-settings@0.2.0
+  - @domicile-desktop/shell-simple@0.0.5
+  - @domicile-desktop/app-history@0.0.5
+  - @domicile-desktop/shell-splash@0.0.5
+  - @domicile-desktop/builder@0.1.3
+
 ## 1.2.0
 
 ### Minor Changes

@@ -1,5 +1,139 @@
 # @domicile-desktop/manganese
 
+## 1.3.0
+
+### Minor Changes
+
+- 24b88fb: Dragging the title bar or edge an app draws itself, such as a GNOME app's header bar or Firefox's tab strip, moves or resizes its window. The compositor checks the press is still held, takes it from the app, and reports `WindowRequest.Move` or `WindowRequest.Resize` (with a `ResizeEdge`); Manganese runs the drag as it does a Meta drag.
+- a5ade39: Games and VM viewers can lock the pointer (`zwp_pointer_constraints_v1`). The compositor offers the lock to the shell for the window under the pointer as `pointerConstraint`, and tells the client only once the shell holds a pointer lock on the window's `<app>` and reports it with `windows.pointerConstrained()`. The engine grants a shell's pointer lock with no click first and no browser bubble. Manganese locks for the focused window and lets go when the keyboard moves away. Confining the pointer to a window is offered but not taken yet.
+- cd75f9a: Picture-in-picture video works: a video's picture-in-picture button, or a site's, floats the video over your windows in the corner of its screen. Drag it to move it, drag an edge to resize it, and point at it for play, pause, track, back-to-tab and close controls. Shells list the videos in `domicile.pictureInPicture` and show one with `<app picture-in-picture="id">`.
+- 69247ca: The tray has a menu of every icon at its end. Pin or unpin any app or extension icon, switch extensions on and off, and change what each can do: its options, which websites it can read, private windows, local files and user scripts, or uninstall it. Settings your config sets show locked. Shells get the same through `domicile.extensions.installed`, `setEnabled`, `configure` and `uninstall`. `Menu` holds check, radio and submenu items, and `ListRow` takes `actions` beside a pressed row.
+- 5315b06: A video entering picture-in-picture grows out of its place in the page, and "Back to tab" shrinks it back in. Shells read where it was from the video's `source`.
+- e4f3394: Right-click a video for "Picture in picture", and drag a picture-in-picture video's progress bar to move through it. Shells get the menu's `picture-in-picture` action with `canPictureInPicture` / `inPictureInPicture`, and `pictureInPicture.seek(id, seconds)`.
+- da632d6: A shell can give you a way back from a VM or remote desktop viewer that holds your shortcuts. A chord bound `--inhibited Meta+Escape` stays the shell's while that window has the keyboard, and `keyboard.switchShortcutsInhibitor` turns the window's hold off and on. Manganese has a `shortcuts-inhibitor toggle` command to bind to it.
+- d3978bb: Electron apps' views show in their windows. The SDK lists them in `domicile.browser.views`, apart from `domicile.browser.windows`, so window lists, task switchers and tiling never treat a view as a window. Manganese draws each view over its window's page where its app asks, hides it while the app hides it, treats a click in it as a click in the window, and runs the app's menu keys pressed in it.
+- 5c11ddc: `domicile list-bindings` prints the running shell's keys and gestures in each
+  binding mode and what they run. A shell command can now answer, and
+  `domicile send-shell` prints the answer: Manganese's `get-workspaces` and
+  `get-tree` answer with JSON, as `swaymsg -t get_workspaces` and `get_tree` do.
+  
+  Breaking: `onCommand` may return `Ok({ output })`;
+  `shell.commands(help, bindings)` takes the bindings, which `bindKeys`
+  describes for you; and `shell.answer(sent, ran)` takes the command's `Result`.
+
+### Patch Changes
+
+- 14704ae: The lock screen is above every window depth, so the overview's workspace outline blurs with the rest of the desk instead of staying sharp over it.
+- 4b7a878: The overview opens and closes more smoothly: the engine no longer waits for hidden workspaces' windows to draw, and opening or closing no longer restyles every part of every window.
+- 5090cbd: The drop target and the selection tint draw over Firefox and Tor Browser windows.
+- 876c824: The overview's workspace rings slide with `translate` as workspaces swap, on the compositor with the cards they ring.
+- 9ea68bf: A window dropped on the side of a nested group's window splits beside the group, as the overlay shows, instead of joining the outer strip.
+- eaa92c7: Showing a background app's window, such as Messages, plays the opening animation.
+- 1209f22: Firefox and Tor Browser windows slide, open, close and ease with the rest of the desktop. A client's popups are drawn with its window and play its motion.
+- d1b3ab9: A picture-in-picture video floats in its own shape instead of stretched into a square, and its back-to-tab and close buttons work.
+- Updated dependencies [14704ae]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [8ff882e]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [18c887f]
+- Updated dependencies [4799f21]
+- Updated dependencies [c70a16a]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [94e5909]
+- Updated dependencies [537a8d8]
+- Updated dependencies [24b88fb]
+- Updated dependencies [d566f68]
+- Updated dependencies [382819f]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [87ac040]
+- Updated dependencies [3aaca85]
+- Updated dependencies [057faa5]
+- Updated dependencies [3e37020]
+- Updated dependencies [a85afe8]
+- Updated dependencies [8f74f44]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [4b7a878]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [0a4d218]
+- Updated dependencies [94f365b]
+- Updated dependencies [3600d3b]
+- Updated dependencies [53615f2]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [8a2777f]
+- Updated dependencies [5090cbd]
+- Updated dependencies [bc4e5bf]
+- Updated dependencies [03dcccf]
+- Updated dependencies [0ee4ce8]
+- Updated dependencies [a5ade39]
+- Updated dependencies [0b38007]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [996cc29]
+- Updated dependencies [3a8d01f]
+- Updated dependencies [756c1bd]
+- Updated dependencies [69247ca]
+- Updated dependencies [c454256]
+- Updated dependencies [85ad296]
+- Updated dependencies [81215c5]
+- Updated dependencies [876c824]
+- Updated dependencies [9ea68bf]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [25522ef]
+- Updated dependencies [eaa92c7]
+- Updated dependencies [637cc16]
+- Updated dependencies [1209f22]
+- Updated dependencies [5ef4689]
+- Updated dependencies [5315b06]
+- Updated dependencies [e821d1f]
+- Updated dependencies [e4f3394]
+- Updated dependencies [d1b3ab9]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [da632d6]
+- Updated dependencies [d3978bb]
+- Updated dependencies [64bda78]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [a9b83d4]
+- Updated dependencies [b0fad3c]
+- Updated dependencies [8c477cc]
+- Updated dependencies [b5edfcd]
+- Updated dependencies [6a0772b]
+- Updated dependencies [2a1913f]
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/manganese-window-management@1.4.0
+  - @domicile-desktop/manganese-lock@1.0.4
+  - @domicile-desktop/system-apps@1.3.0
+  - @domicile-desktop/manganese-launcher@1.2.0
+  - @domicile-desktop/manganese-bar-module-downloads@0.1.3
+  - @domicile-desktop/manganese-notifications@2.0.1
+  - @domicile-desktop/manganese-bar-module-gmail@2.0.3
+  - @domicile-desktop/manganese-bar-module-workspace-switcher@1.2.1
+  - @domicile-desktop/manganese-bar-module-clock@1.0.4
+  - @domicile-desktop/react@0.2.0
+  - @domicile-desktop/manganese-bar-module-tray@1.2.0
+  - @domicile-desktop/manganese-bar@1.1.3
+  - @domicile-desktop/manganese-bar-module-battery@1.1.3
+  - @domicile-desktop/manganese-bar-module-bluetooth@1.1.3
+  - @domicile-desktop/manganese-bar-module-brightness@2.0.3
+  - @domicile-desktop/manganese-bar-module-cast@0.1.3
+  - @domicile-desktop/manganese-bar-module-google-messages@1.0.3
+  - @domicile-desktop/manganese-bar-module-idle-inhibitor@1.1.3
+  - @domicile-desktop/manganese-bar-module-keymap@0.1.3
+  - @domicile-desktop/manganese-bar-module-launcher-button@1.1.1
+  - @domicile-desktop/manganese-bar-module-network@1.1.3
+  - @domicile-desktop/manganese-bar-module-notifications@2.0.1
+  - @domicile-desktop/manganese-bar-module-sharing@1.1.3
+  - @domicile-desktop/manganese-bar-module-theme-switch@1.1.3
+  - @domicile-desktop/manganese-bar-module-volume@2.0.3
+  - @domicile-desktop/manganese-clipboard@1.1.3
+  - @domicile-desktop/manganese-host@2.0.3
+  - @domicile-desktop/manganese-quick-settings@1.0.3
+  - @domicile-desktop/manganese-wallpaper@1.1.3
+  - @domicile-desktop/manganese-inbox-gmail@0.1.3
+  - @domicile-desktop/system-audio@1.1.3
+  - @domicile-desktop/system-backlight@1.1.3
+  - @domicile-desktop/manganese-inbox-google-messages@0.1.3
+
 ## 1.2.0
 
 ### Minor Changes

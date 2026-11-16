@@ -1,5 +1,61 @@
 # @domicile-desktop/component-library
 
+## 2.2.0
+
+### Minor Changes
+
+- 382819f: Manganese draws an Electron app's menu bar under its window's tab. The app's accelerators run their entries, Alt and a menu's letter open it, and Alt shows or hides a bar the app auto-hides. The SDK reads a window's menu with `@domicile-desktop/sdk/app-menu` (`appMenu`, `acceleratedBy`, `openedByMnemonic`), and the component library has a `MenuBar`.
+- 69247ca: The tray has a menu of every icon at its end. Pin or unpin any app or extension icon, switch extensions on and off, and change what each can do: its options, which websites it can read, private windows, local files and user scripts, or uninstall it. Settings your config sets show locked. Shells get the same through `domicile.extensions.installed`, `setEnabled`, `configure` and `uninstall`. `Menu` holds check, radio and submenu items, and `ListRow` takes `actions` beside a pressed row.
+
+### Patch Changes
+
+- 14704ae: The lock screen is above every window depth, so the overview's workspace outline blurs with the rest of the desk instead of staying sharp over it.
+- 4799f21: Volume and brightness toasts and the slider's level meter move their fills with a transform, so a new level skips layout.
+- 3600d3b: Loading skeletons in History and the splash's dot grid move with transforms, and shadows that fade in fade on their own layer, so they no longer repaint every frame. A check fails on new animations of properties the compositor cannot run.
+- Updated dependencies [3bdac3b]
+- Updated dependencies [8ff882e]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [94e5909]
+- Updated dependencies [24b88fb]
+- Updated dependencies [d566f68]
+- Updated dependencies [382819f]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [87ac040]
+- Updated dependencies [057faa5]
+- Updated dependencies [3e37020]
+- Updated dependencies [a85afe8]
+- Updated dependencies [8f74f44]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [0a4d218]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [8a2777f]
+- Updated dependencies [03dcccf]
+- Updated dependencies [a5ade39]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [996cc29]
+- Updated dependencies [756c1bd]
+- Updated dependencies [69247ca]
+- Updated dependencies [c454256]
+- Updated dependencies [85ad296]
+- Updated dependencies [81215c5]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [25522ef]
+- Updated dependencies [5ef4689]
+- Updated dependencies [5315b06]
+- Updated dependencies [e821d1f]
+- Updated dependencies [e4f3394]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [da632d6]
+- Updated dependencies [d3978bb]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [8c477cc]
+- Updated dependencies [2a1913f]
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/system-apps@1.3.0
+
 ## 2.1.0
 
 ### Minor Changes

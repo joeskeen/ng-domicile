@@ -1,5 +1,62 @@
 # @domicile-desktop/manganese-lock
 
+## 1.0.4
+
+### Patch Changes
+
+- c70a16a: The lock screen keeps the keyboard in the passphrase field: it takes focus back from anything else in the shell, and a key typed while nothing has focus goes into the field.
+- 0b38007: A bar clock without seconds now wakes the shell every 5 seconds instead of every second, and redraws only on the minute. The lock screen's clock no longer ticks while the desktop is unlocked.
+- Updated dependencies [14704ae]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [8ff882e]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [4799f21]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [94e5909]
+- Updated dependencies [24b88fb]
+- Updated dependencies [d566f68]
+- Updated dependencies [382819f]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [87ac040]
+- Updated dependencies [057faa5]
+- Updated dependencies [3e37020]
+- Updated dependencies [a85afe8]
+- Updated dependencies [8f74f44]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [0a4d218]
+- Updated dependencies [3600d3b]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [8a2777f]
+- Updated dependencies [03dcccf]
+- Updated dependencies [a5ade39]
+- Updated dependencies [0b38007]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [996cc29]
+- Updated dependencies [756c1bd]
+- Updated dependencies [69247ca]
+- Updated dependencies [c454256]
+- Updated dependencies [85ad296]
+- Updated dependencies [81215c5]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [25522ef]
+- Updated dependencies [5ef4689]
+- Updated dependencies [5315b06]
+- Updated dependencies [e821d1f]
+- Updated dependencies [e4f3394]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [da632d6]
+- Updated dependencies [d3978bb]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [8c477cc]
+- Updated dependencies [2a1913f]
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/manganese-bar-module-clock@1.0.4
+  - @domicile-desktop/manganese-bar@1.1.3
+  - @domicile-desktop/manganese-host@2.0.3
+
 ## 1.0.3
 
 ### Patch Changes

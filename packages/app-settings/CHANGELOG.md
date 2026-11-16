@@ -1,5 +1,69 @@
 # @domicile-desktop/app-settings
 
+## 0.2.0
+
+### Minor Changes
+
+- 8ff882e: Extensions can run in private windows. Each extension's chrome://extensions settings are now yours to set: whether it runs in private windows and on local files, whether it may run user scripts, and which sites it runs on (when you click it, on specific sites, or on all sites). Set them in the config's `extensions.settings`, by extension id, or in the Settings app, which shows the ones an extension can use while it is on and moves Options and Uninstall to the bottom of its row. A setting the config drops goes back to Chrome's default.
+- 60e7c7e: Settings shows "Not supported" in place of the HDR switch for a plugged-in monitor that can't show HDR. It learns which monitors those are from the new `which_monitors` question, which the compositor answers with each lit monitor's names and HDR state.
+
+### Patch Changes
+
+- 94e5909: Settings reads every key the compositor reads, such as `input.mouse`, `input.touchpad` and `terminal`, instead of refusing the config. Its schema is now `@domicile-desktop/sdk/config-schema`, a Zod schema generated from the compositor's config with its defaults filled in.
+- 996cc29: A shell can hear when nobody has been at the desk for a time it chooses (`session.idleAfter`), or a time before the screens blank (`session.idleBeforeBlanking`). These replace `session.idleWarnings` and the `idle.warn_before_seconds` setting, which are gone.
+- c454256: A display profile can drive a monitor in HDR (HDR10) with `hdr: true`, and set how bright ordinary content's white is there with `sdr_white` (203 cd/m² by default). It is off by default and used only where the monitor's EDID takes PQ and its connector scans out in 10 bits. The SDK's config types gain both fields, and Settings reads profiles that set them instead of refusing them.
+- 04baee9: Settings' Displays page can turn on HDR for each monitor in a profile and set
+  how bright everyday content looks while it's on. On a narrow window, each
+  monitor's settings stack into labeled lines.
+- e821d1f: A display profile can turn on adaptive sync (variable refresh rate, FreeSync, G-Sync Compatible) per monitor with `adaptive_sync: true`. It is off by default, asked for only where the monitor and driver report support, and retried without it when the driver refuses the modeset. The SDK's `Display` gains `adaptiveSync` (`unsupported`, `off` or `on`), which says what the hardware is doing. Settings now reads profiles that set `refresh` or `adaptive_sync` instead of refusing them.
+- Updated dependencies [14704ae]
+- Updated dependencies [3bdac3b]
+- Updated dependencies [8ff882e]
+- Updated dependencies [ebfad4b]
+- Updated dependencies [4799f21]
+- Updated dependencies [f5fbd04]
+- Updated dependencies [94e5909]
+- Updated dependencies [24b88fb]
+- Updated dependencies [d566f68]
+- Updated dependencies [382819f]
+- Updated dependencies [fb07c3f]
+- Updated dependencies [87ac040]
+- Updated dependencies [057faa5]
+- Updated dependencies [3e37020]
+- Updated dependencies [a85afe8]
+- Updated dependencies [8f74f44]
+- Updated dependencies [9bd54ab]
+- Updated dependencies [0e71fa1]
+- Updated dependencies [19cc2c5]
+- Updated dependencies [0a4d218]
+- Updated dependencies [3600d3b]
+- Updated dependencies [d2a68f5]
+- Updated dependencies [8a2777f]
+- Updated dependencies [03dcccf]
+- Updated dependencies [a5ade39]
+- Updated dependencies [cd75f9a]
+- Updated dependencies [996cc29]
+- Updated dependencies [756c1bd]
+- Updated dependencies [69247ca]
+- Updated dependencies [c454256]
+- Updated dependencies [85ad296]
+- Updated dependencies [81215c5]
+- Updated dependencies [d0fbc5b]
+- Updated dependencies [25522ef]
+- Updated dependencies [5ef4689]
+- Updated dependencies [5315b06]
+- Updated dependencies [e821d1f]
+- Updated dependencies [e4f3394]
+- Updated dependencies [6aad1fa]
+- Updated dependencies [da632d6]
+- Updated dependencies [d3978bb]
+- Updated dependencies [5c11ddc]
+- Updated dependencies [8c477cc]
+- Updated dependencies [2a1913f]
+  - @domicile-desktop/component-library@2.2.0
+  - @domicile-desktop/sdk@3.0.0
+  - @domicile-desktop/react@0.2.0
+
 ## 0.1.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @domicile-desktop/ci
 
+## 0.0.3
+
+### Patch Changes
+
+- 501a4b1: The flake serves Domicile from a binary cache at `https://packages.domicile-desktop.com/nix`, filled for each commit `stable` moves to, so `nix run` and configs pinned to `stable` download Domicile instead of building it.
+
 ## 0.0.2
 
 ### Patch Changes
