@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "components/domicile/browser/electron_protocol.h"
 #include "components/domicile/browser/web_view_partition.h"
@@ -20,6 +21,11 @@ namespace domicile {
 // shell's profile, where the app's windows keep theirs. Each runs `done`
 // once. With no shell there is no profile, so there is nothing to find,
 // keep or clear. See "Sessions" in docs/architecture/ELECTRON-APPS.md.
+
+// Where `partition` is kept on disk, without making it, when it persists, a
+// shell's profile keeps it and the engine hasn't opened it this run.
+std::optional<base::FilePath> ElectronStoragePath(
+    const WebViewPartition& partition);
 
 void GetElectronCookies(
     const WebViewPartition& partition,

@@ -116,6 +116,7 @@ const engineEvent = z.discriminatedUnion("type", [
     schemes: z.array(
       z.object({ privileges: z.array(z.string()), scheme: z.string() }),
     ),
+    storage: z.string().optional(),
     type: z.literal("ready"),
   }),
   z.object({ type: z.literal("refused"), why: z.string() }),
@@ -266,6 +267,11 @@ export type Engine = {
    */
   readonly schemes: readonly RegisteredScheme[];
   /**
+   * Where the app's partition is on disk, given only while the engine hasn't
+   * opened it, so the host may write there before the app's first window.
+   */
+  readonly storage?: string;
+  /**
    * `window` for each window event, `refused` for a request the engine could
    * not take, and `lost` once the connection ends.
    */
@@ -299,7 +305,7 @@ export const connectEngine = (
     let ready = false;
     let pending = "";
 
-    const engine: Omit<Engine, "schemes"> = {
+    const engine: Omit<Engine, "schemes" | "storage"> = {
       events,
       send: (request) => {
         socket.write(`${JSON.stringify(request)}\n`);
@@ -314,7 +320,13 @@ export const connectEngine = (
         ready = true;
         resolve(
           parsed.data.type === "ready"
-            ? Ok({ ...engine, schemes: parsed.data.schemes })
+            ? Ok({
+                ...engine,
+                schemes: parsed.data.schemes,
+                ...(parsed.data.storage === undefined
+                  ? {}
+                  : { storage: parsed.data.storage }),
+              })
             : Err(
                 `the engine refused this app: ${"why" in parsed.data ? parsed.data.why : parsed.data.type}`,
               ),

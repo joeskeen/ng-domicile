@@ -616,7 +616,12 @@ base::expected<ElectronRequest, ElectronRefusal> ParseElectronRequest(
 
 // The lines the engine sends, each ending in a newline.
 // `schemes` are the apps' own schemes the engine registered as it started.
-std::string ElectronReady(const std::vector<ElectronScheme>& schemes);
+// `storage` is where the app's own partition is kept on disk, given only
+// while the engine hasn't opened it, for the host to bring the app's sign-ins
+// over before its first window there.
+std::string ElectronReady(
+    const std::vector<ElectronScheme>& schemes,
+    const std::optional<base::FilePath>& storage = std::nullopt);
 // The answer to window `window`'s executeJavaScript `call`: what the code
 // gave, or why it gave nothing.
 std::string ElectronJavaScriptResult(

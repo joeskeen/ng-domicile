@@ -5,7 +5,10 @@
 
 #include <string>
 
+#include "base/containers/span.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
+#include "crypto/hash.h"
 
 namespace domicile {
 namespace {
@@ -34,6 +37,15 @@ ParseWebViewPartition(std::string_view attribute) {
 std::string WebViewPartitionAttribute(const WebViewPartition& partition) {
   return partition.persist ? base::StrCat({kPersistPrefix, partition.name})
                            : partition.name;
+}
+
+base::FilePath WebViewPartitionPath(const base::FilePath& profile,
+                                    const WebViewPartition& partition) {
+  const auto hash = crypto::hash::Sha256(partition.name);
+  return profile.Append("Storage")
+      .Append("ext")
+      .Append(kWebViewPartitionDomain)
+      .AppendASCII(base::HexEncode(base::span(hash).first<6>()));
 }
 
 }  // namespace domicile

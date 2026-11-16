@@ -10,6 +10,12 @@
 namespace domicile {
 namespace {
 
+TEST(WebViewPartitionTest, APartitionIsOnDiskWhereContentPutsIt) {
+  EXPECT_EQ(WebViewPartitionPath(base::FilePath("/p"),
+                                 {.name = "work", .persist = true}),
+            base::FilePath("/p/Storage/ext/domicile/00E13ED7AF55"));
+}
+
 TEST(WebViewPartitionTest, NoNameIsTheProfilesOwnPartition) {
   EXPECT_EQ(ParseWebViewPartition("").value(),
             std::optional<WebViewPartition>());

@@ -279,6 +279,12 @@ TEST(ElectronProtocolTest, ReadySaysWhichSchemesTheEngineRegistered) {
             "\"claude-media\"}],\"type\":\"ready\"}\n");
 }
 
+TEST(ElectronProtocolTest, ReadySaysWhereTheAppsPartitionIs) {
+  EXPECT_EQ(ElectronReady({}, base::FilePath("/p/Storage/ext/domicile/AB")),
+            "{\"schemes\":[],\"storage\":\"/p/Storage/ext/domicile/AB\","
+            "\"type\":\"ready\"}\n");
+}
+
 TEST(ElectronProtocolTest, OpenWindowMayOpenAView) {
   const auto window = ParseElectronRequest(
       R"({"type":"open_window","window":1,"url":"https://a.test/"})");

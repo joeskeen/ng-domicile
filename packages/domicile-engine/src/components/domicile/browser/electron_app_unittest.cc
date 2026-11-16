@@ -82,6 +82,11 @@ class FakeDesk final : public ElectronDesk {
                   const std::string& args_json) override {
     calls.push_back("send " + id + " " + channel + " " + args_json);
   }
+  std::optional<base::FilePath> StoragePath(
+      const WebViewPartition& partition) override {
+    return storage.has_value() ? std::optional(storage->Append(partition.name))
+                               : std::nullopt;
+  }
   void ExecuteJavaScript(
       const std::string& id,
       const std::string& code,
@@ -174,6 +179,8 @@ class FakeDesk final : public ElectronDesk {
   // What GetCookies finds and why SetCookie fails, when it does.
   std::vector<ElectronCookie> cookies;
   std::optional<std::string> cookie_refusal;
+  // Where StoragePath keeps partitions, by name, if anywhere.
+  std::optional<base::FilePath> storage;
   // Each ExecuteJavaScript's answer, oldest first.
   std::vector<
       base::OnceCallback<void(base::expected<base::Value, std::string>)>>
@@ -225,6 +232,15 @@ TEST_F(ElectronAppTest, ReadySaysWhichSchemesTheEngineRegistered) {
 
   EXPECT_EQ(sent_, Lines{"{\"schemes\":[{\"privileges\":[\"secure\"],"
                          "\"scheme\":\"app\"}],\"type\":\"ready\"}\n"});
+}
+
+TEST_F(ElectronAppTest, ReadySaysWhereTheAppsPartitionIsKept) {
+  desk_.storage = base::FilePath("/p");
+
+  app_->Take(kHello);
+
+  ASSERT_EQ(sent_.size(), 1u);
+  EXPECT_NE(sent_[0].find("\"storage\":\"/p/"), std::string::npos) << sent_[0];
 }
 
 TEST_F(ElectronAppTest, NothingOpensBeforeHello) {

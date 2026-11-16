@@ -181,7 +181,7 @@ void ElectronApp::Take(std::string_view line) {
       send_.Run(ElectronRefused("this app already said hello"));
     } else {
       hello_ = *hello;
-      send_.Run(ElectronReady(schemes_));
+      send_.Run(ElectronReady(schemes_, desk_->StoragePath(hello_->partition)));
     }
   } else if (!hello_.has_value()) {
     send_.Run(ElectronRefused("an app says hello first"));

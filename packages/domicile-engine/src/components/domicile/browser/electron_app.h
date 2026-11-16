@@ -230,6 +230,11 @@ class ElectronDesk {
   virtual void SendToPage(const std::string& id,
                           const std::string& channel,
                           const std::string& args_json) = 0;
+  // Where `partition` is kept on disk, when it is kept there, the desk has a
+  // profile to keep it in, and nothing has opened it yet: until a window
+  // does, the app's host may write there.
+  virtual std::optional<base::FilePath> StoragePath(
+      const WebViewPartition& partition) = 0;
   // webContents.executeJavaScript: runs `code` in the main world of window
   // `id`'s page, as if the user had acted when `user_gesture`, and runs
   // `done` once with what it gave, after a promise it gives settles, or why

@@ -40,9 +40,40 @@ content::StoragePartition* StorageOf(const WebViewPartition& partition) {
     return nullptr;
   }
   content::BrowserContext* context = shell->GetBrowserContext();
-  return context->GetStoragePartition(content::StoragePartitionConfig::Create(
-      context, kWebViewPartitionDomain, partition.name, !partition.persist));
+  content::StoragePartition* storage =
+      context->GetStoragePartition(content::StoragePartitionConfig::Create(
+          context, kWebViewPartitionDomain, partition.name,
+          !partition.persist));
+  // The host copies an app's sign-ins to where ElectronStoragePath says;
+  // content naming it otherwise would lose them without a word.
+  if (partition.persist) {
+    CHECK_EQ(storage->GetPath(),
+             WebViewPartitionPath(context->GetPath(), partition));
+  }
+  return storage;
 }
+
+}  // namespace
+
+std::optional<base::FilePath> ElectronStoragePath(
+    const WebViewPartition& partition) {
+  content::WebContents* shell = DeskShellContents();
+  if (shell == nullptr || !partition.persist) {
+    return std::nullopt;
+  }
+  content::BrowserContext* context = shell->GetBrowserContext();
+  // Once open, its databases are the engine's: nothing may write under them.
+  if (context->GetStoragePartition(
+          content::StoragePartitionConfig::Create(
+              context, kWebViewPartitionDomain, partition.name,
+              /*in_memory=*/false),
+          /*can_create=*/false) != nullptr) {
+    return std::nullopt;
+  }
+  return WebViewPartitionPath(context->GetPath(), partition);
+}
+
+namespace {
 
 std::string SameSiteName(net::CookieSameSite same_site) {
   switch (same_site) {

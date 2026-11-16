@@ -813,6 +813,9 @@ source_set("web_view_partition") {
   ]
 
   public_deps = [ "//base" ]
+
+  # Where a partition is on disk is a hash of its name.
+  deps = [ "//crypto" ]
 }
 
 # Electron's contextBridge: copying values between a preload's isolated world

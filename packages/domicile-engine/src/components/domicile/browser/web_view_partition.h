@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+#include "base/files/file_path.h"
 #include "base/types/expected.h"
 
 namespace domicile {
@@ -35,6 +36,13 @@ ParseWebViewPartition(std::string_view attribute);
 
 // The attribute that names `partition`.
 std::string WebViewPartitionAttribute(const WebViewPartition& partition);
+
+// Where a profile at `profile` keeps `partition` on disk, as content's
+// StoragePartitionImplMap::GetStoragePartitionPath names it, which isn't
+// public: Storage/ext/<domain>/ and the first six bytes of the name's SHA-256
+// in hex. ElectronStorage checks it against the partition's own GetPath.
+base::FilePath WebViewPartitionPath(const base::FilePath& profile,
+                                    const WebViewPartition& partition);
 
 }  // namespace domicile
 

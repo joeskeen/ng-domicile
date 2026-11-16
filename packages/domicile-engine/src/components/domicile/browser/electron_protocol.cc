@@ -1237,7 +1237,8 @@ base::DictValue ElectronCookieValue(const ElectronCookie& cookie) {
   return value;
 }
 
-std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {
+std::string ElectronReady(const std::vector<ElectronScheme>& schemes,
+                          const std::optional<base::FilePath>& storage) {
   base::ListValue registered;
   for (const ElectronScheme& scheme : schemes) {
     base::ListValue privileges;
@@ -1251,6 +1252,9 @@ std::string ElectronReady(const std::vector<ElectronScheme>& schemes) {
   base::DictValue event;
   event.Set("type", "ready");
   event.Set("schemes", std::move(registered));
+  if (storage.has_value()) {
+    event.Set("storage", storage->AsUTF8Unsafe());
+  }
   return Line(std::move(event));
 }
 

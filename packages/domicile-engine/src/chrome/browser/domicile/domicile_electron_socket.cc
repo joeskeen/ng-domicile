@@ -100,6 +100,10 @@ class ChromeElectronDesk final : public ElectronDesk {
       page->Deliver(channel, args_json);
     }
   }
+  std::optional<base::FilePath> StoragePath(
+      const WebViewPartition& partition) override {
+    return ElectronStoragePath(partition);
+  }
   void ExecuteJavaScript(
       const std::string& id,
       const std::string& code,

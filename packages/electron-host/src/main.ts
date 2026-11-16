@@ -51,6 +51,7 @@ import { createWebRequests } from "./electron/web-request";
 import { connectEngine, connectEngineWhenUp } from "./engine";
 import type { Environment } from "./environment";
 import { readEnvironment } from "./environment";
+import { importProfile } from "./import-profile";
 import { mirrorResources } from "./mirror";
 import { electronPaths } from "./paths";
 import { quirksOf } from "./quirks";
@@ -233,6 +234,15 @@ const main = async ([resources, ...args]: string[]) => {
           menu as Parameters<typeof Menu.setApplicationMenu>[0],
         ),
     };
+    const safeStorage = createSafeStorage({
+      backend: () =>
+        selectBackend(
+          app.commandLine.getSwitchValue("password-store"),
+          env.XDG_CURRENT_DESKTOP,
+          (why) => unsupported(`${pkg.productName} ${why}`),
+        ),
+      password: () => desktop.safeStoragePassword(app.getName()),
+    });
     const electron: Record<string, unknown> = {
       app,
       autoUpdater: createAutoUpdater(),
@@ -297,15 +307,7 @@ const main = async ([resources, ...args]: string[]) => {
           registered: engine.schemes,
         }),
       },
-      safeStorage: createSafeStorage({
-        backend: () =>
-          selectBackend(
-            app.commandLine.getSwitchValue("password-store"),
-            env.XDG_CURRENT_DESKTOP,
-            (why) => unsupported(`${pkg.productName} ${why}`),
-          ),
-        password: () => desktop.safeStoragePassword(app.getName()),
-      }),
+      safeStorage,
       screen: createScreen(listDisplays, desktopState.displays),
       session,
       shell: createShell(runCommand),
@@ -351,6 +353,21 @@ const main = async ([resources, ...args]: string[]) => {
         }
       },
     });
+    // Before the app's first window, so it opens signed in as on its own
+    // Electron. Read with the app's own key, before it can change any path.
+    const imported = await importProfile({
+      decrypt: safeStorage.decryptBytes,
+      now: Date.now,
+      setCookie: (details) => session.defaultSession.cookies.set(details),
+      storage: engine.storage,
+      userData: app.getPath("userData"),
+    });
+    if (imported !== undefined) {
+      // biome-ignore lint/suspicious/noConsole: what came over from the app's own Electron, for the supervisor's log
+      console.warn(
+        `electron-host: brought ${pkg.productName}'s sign-ins over from its own Electron: ${imported.storage.join(", ") || "no site storage"}, ${imported.cookies} cookies${imported.skipped > 0 ? ` (${imported.skipped} couldn't be)` : ""}`,
+      );
+    }
     Object.assign(process, electronProcess(mirror));
     Object.assign(process.versions, { electron: ELECTRON_VERSION });
     process.argv = [process.execPath, ...args];

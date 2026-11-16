@@ -156,6 +156,16 @@ names it to apps in `DOMICILE_ELECTRON_SOCK`.
 - **`loadFile`** loads from the mirror, so the engine reads plain files.
 - **Storage:** each app gets its own partition, named by its `package.json`
   name. Apps share no cookies with each other or with the browser.
+- **Sign-ins:** on an app's first run on the engine, before its first window,
+  `electron-host` brings its sign-ins over from its own Electron's profile
+  (`userData`), so it opens signed in (`src/import-profile.ts`). Its site
+  storage (`Local Storage`, `IndexedDB`, `WebStorage`) is copied as files into
+  the partition, which the engine names in `ready` (`storage`) only while it
+  hasn't opened it, and its cookies are read from `Network/Cookies`, decrypted
+  with the app's own safeStorage key, and set through the engine. A
+  `.domicile-imported-from-electron` file in the partition marks it done. The
+  app's own profile is only read, so falling back to its Electron finds it
+  as it was.
 
 ### Preload and IPC
 

@@ -106,10 +106,7 @@ const encrypt = (key: Buffer, prefix: string, text: string) => {
 const decrypt = (key: Buffer, ciphertext: Buffer) => {
   try {
     const decipher = createDecipheriv("aes-128-cbc", key, IV);
-    return Buffer.concat([
-      decipher.update(ciphertext),
-      decipher.final(),
-    ]).toString("utf8");
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   } catch {
     // A wrong key shows as bad padding: the caller tries the next key, then
     // throws as Electron does.
@@ -154,26 +151,36 @@ export const createSafeStorage = (dependencies: SafeStorageDependencies) => {
 
   const isEncryptionAvailable = () => keyring() !== undefined || usePlainText;
 
+  /** `encrypted`'s plain bytes, as Chromium's OSCrypt decrypts them. */
+  const decryptBytes = (encrypted: Buffer) => {
+    const prefix = encrypted.subarray(0, 3).toString("latin1");
+    const body = encrypted.subarray(3);
+    const key = prefix === "v11" ? keyring() : V10_KEY;
+    const plain =
+      (prefix === "v10" || prefix === "v11") && key !== undefined
+        ? (decrypt(key, body) ?? decrypt(EMPTY_KEY, body))
+        : undefined;
+    if (plain === undefined) {
+      throw new Error(
+        "Error while decrypting the ciphertext provided to safeStorage.decryptString.",
+      );
+    }
+    return plain;
+  };
+
   return {
+    /**
+     * Not Electron's: the bytes, for the cookies Chromium encrypts with the
+     * same key, which needn't be text.
+     */
+    decryptBytes,
     decryptString: (encrypted: Buffer) => {
       if (!Buffer.isBuffer(encrypted)) {
         throw new TypeError(
           "Expected the first argument of decryptString() to be a buffer",
         );
       }
-      const prefix = encrypted.subarray(0, 3).toString("latin1");
-      const body = encrypted.subarray(3);
-      const key = prefix === "v11" ? keyring() : V10_KEY;
-      const plain =
-        (prefix === "v10" || prefix === "v11") && key !== undefined
-          ? (decrypt(key, body) ?? decrypt(EMPTY_KEY, body))
-          : undefined;
-      if (plain === undefined) {
-        throw new Error(
-          "Error while decrypting the ciphertext provided to safeStorage.decryptString.",
-        );
-      }
-      return plain;
+      return decryptBytes(encrypted).toString("utf8");
     },
 
     encryptString: (plainText: string) => {
